@@ -1,0 +1,281 @@
+{
+ "contestDetail": {
+  "name": "NFL $150K mini-MAX [150 Entry Max]",
+  "entryFee": 0.5,
+  "maximumEntries": 356718,
+  "maximumEntriesPerUser": 150,
+  "payoutSummary": [
+   {
+    "minPosition": 1,
+    "maxPosition": 1,
+    "payoutDescriptions": [
+     {
+      "value": 15000
+     }
+    ]
+   },
+   {
+    "minPosition": 2,
+    "maxPosition": 2,
+    "payoutDescriptions": [
+     {
+      "value": 7500
+     }
+    ]
+   },
+   {
+    "minPosition": 3,
+    "maxPosition": 3,
+    "payoutDescriptions": [
+     {
+      "value": 5000
+     }
+    ]
+   },
+   {
+    "minPosition": 4,
+    "maxPosition": 4,
+    "payoutDescriptions": [
+     {
+      "value": 4000
+     }
+    ]
+   },
+   {
+    "minPosition": 5,
+    "maxPosition": 5,
+    "payoutDescriptions": [
+     {
+      "value": 3000
+     }
+    ]
+   },
+   {
+    "minPosition": 6,
+    "maxPosition": 6,
+    "payoutDescriptions": [
+     {
+      "value": 2000
+     }
+    ]
+   },
+   {
+    "minPosition": 7,
+    "maxPosition": 8,
+    "payoutDescriptions": [
+     {
+      "value": 1000
+     }
+    ]
+   },
+   {
+    "minPosition": 9,
+    "maxPosition": 10,
+    "payoutDescriptions": [
+     {
+      "value": 750
+     }
+    ]
+   },
+   {
+    "minPosition": 11,
+    "maxPosition": 12,
+    "payoutDescriptions": [
+     {
+      "value": 500
+     }
+    ]
+   },
+   {
+    "minPosition": 13,
+    "maxPosition": 15,
+    "payoutDescriptions": [
+     {
+      "value": 300
+     }
+    ]
+   },
+   {
+    "minPosition": 16,
+    "maxPosition": 20,
+    "payoutDescriptions": [
+     {
+      "value": 200
+     }
+    ]
+   },
+   {
+    "minPosition": 21,
+    "maxPosition": 25,
+    "payoutDescriptions": [
+     {
+      "value": 150
+     }
+    ]
+   },
+   {
+    "minPosition": 26,
+    "maxPosition": 35,
+    "payoutDescriptions": [
+     {
+      "value": 100
+     }
+    ]
+   },
+   {
+    "minPosition": 36,
+    "maxPosition": 45,
+    "payoutDescriptions": [
+     {
+      "value": 75
+     }
+    ]
+   },
+   {
+    "minPosition": 46,
+    "maxPosition": 60,
+    "payoutDescriptions": [
+     {
+      "value": 60
+     }
+    ]
+   },
+   {
+    "minPosition": 61,
+    "maxPosition": 80,
+    "payoutDescriptions": [
+     {
+      "value": 50
+     }
+    ]
+   },
+   {
+    "minPosition": 81,
+    "maxPosition": 105,
+    "payoutDescriptions": [
+     {
+      "value": 40
+     }
+    ]
+   },
+   {
+    "minPosition": 106,
+    "maxPosition": 135,
+    "payoutDescriptions": [
+     {
+      "value": 30
+     }
+    ]
+   },
+   {
+    "minPosition": 136,
+    "maxPosition": 170,
+    "payoutDescriptions": [
+     {
+      "value": 25
+     }
+    ]
+   },
+   {
+    "minPosition": 171,
+    "maxPosition": 215,
+    "payoutDescriptions": [
+     {
+      "value": 20
+     }
+    ]
+   },
+   {
+    "minPosition": 216,
+    "maxPosition": 275,
+    "payoutDescriptions": [
+     {
+      "value": 15
+     }
+    ]
+   },
+   {
+    "minPosition": 276,
+    "maxPosition": 365,
+    "payoutDescriptions": [
+     {
+      "value": 10
+     }
+    ]
+   },
+   {
+    "minPosition": 366,
+    "maxPosition": 480,
+    "payoutDescriptions": [
+     {
+      "value": 8
+     }
+    ]
+   },
+   {
+    "minPosition": 481,
+    "maxPosition": 630,
+    "payoutDescriptions": [
+     {
+      "value": 6
+     }
+    ]
+   },
+   {
+    "minPosition": 631,
+    "maxPosition": 955,
+    "payoutDescriptions": [
+     {
+      "value": 5
+     }
+    ]
+   },
+   {
+    "minPosition": 956,
+    "maxPosition": 1650,
+    "payoutDescriptions": [
+     {
+      "value": 4
+     }
+    ]
+   },
+   {
+    "minPosition": 1651,
+    "maxPosition": 3500,
+    "payoutDescriptions": [
+     {
+      "value": 3
+     }
+    ]
+   },
+   {
+    "minPosition": 3501,
+    "maxPosition": 9500,
+    "payoutDescriptions": [
+     {
+      "value": 2
+     }
+    ]
+   },
+   {
+    "minPosition": 9501,
+    "maxPosition": 24000,
+    "payoutDescriptions": [
+     {
+      "value": 1.5
+     }
+    ]
+   },
+   {
+    "minPosition": 24001,
+    "maxPosition": 75700,
+    "payoutDescriptions": [
+     {
+      "value": 1
+     }
+    ]
+   }
+  ],
+  "source": "Kenny's DK GameCenter screenshots 11/08/2026 12:10 ET"
+ }
+}
