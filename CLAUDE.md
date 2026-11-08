@@ -13,7 +13,11 @@ language. **All times are Eastern.**
   late swap. Thanksgiving week's chat also runs the Thursday slate.
 - A weekly chat may run every `nflmain` command and `research.prep`, and commit and push **data
   only** (`data/history/`, `data/state/`, `data/overrides/`, `data/settings/`, `data/contests/`,
-  `data/contests_meta/`) to the main branch.
+  `data/contests_meta/`, `data/research/history/`) to the main branch.
+- **History database** (`data/research/history/`, built by `research/history/build_db.py`): it
+  covers 2021 through the last completed week, and Tuesday's early look adds each new week.
+  Ownership history is paid (FantasyLabs etc.): **never buy data**; ask Kenny first if it seems
+  worth it.
 
 ## Only the latest NFL Main chat makes changes (owner rule)
 Code, data, CLAUDE.md, the runbook, branches, pull requests and NFL Main scheduled tasks change
