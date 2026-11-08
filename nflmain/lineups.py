@@ -160,11 +160,11 @@ def violations(lu, P: Pool, rules: Rules | None = None) -> list[str]:
     return out
 
 
-def shapes(lus: np.ndarray, P: Pool) -> dict:
+def shapes(lus: np.ndarray, P: Pool, cheap_salary: float | None = None) -> dict:
     """Per lineup: QB + exactly 2 pass-catchers (double), exactly 1 run-back (an opposing WR/TE -
     workbook M4 counts receivers, not RBs), TE in FLEX (two TEs), RB in FLEX (three RBs) - the
     workbook's portfolio shares (M1, M4, M11)."""
-    out = {"double": [], "bringback": [], "te_flex": [], "rb_flex": []}
+    out = {"double": [], "bringback": [], "te_flex": [], "rb_flex": [], "cheap2": []}
     for lu in np.atleast_2d(lus):
         q = lu[P.pos[lu] == "QB"][0]
         mates = sum(1 for i in lu if P.team[i] == P.team[q] and P.pos[i] in ("WR", "TE"))
@@ -173,6 +173,8 @@ def shapes(lus: np.ndarray, P: Pool) -> dict:
         out["bringback"].append(bb == 1)
         out["te_flex"].append(int((P.pos[lu] == "TE").sum()) == 2)
         out["rb_flex"].append(int((P.pos[lu] == "RB").sum()) == 3)
+        cs = 4500.0 if cheap_salary is None else cheap_salary      # Kenny 11/08: lineups with 2 cheap QB/RB/WR
+        out["cheap2"].append(sum(1 for i in lu if P.pos[i] in ("QB", "RB", "WR") and P.sal[i] <= cs) == 2)
     return {k: np.array(v, bool) for k, v in out.items()}
 
 

@@ -97,6 +97,11 @@ def _fill(points, open_slots, allowed, ctx, keep, budget, floor, team_room, game
             add(r2, -np.inf, 2 - have + M)                            # <= 2 when this QB is used
             r1 = row.copy(); r1[k] -= max(1 - have, 0)
             add(r1, 0, np.inf)                                        # >= 1 when this QB is used
+    # Kenny 11/08: never 3 cheap QB/RB/WR in a lineup
+    cheap_of = lambda i: pos[i] in ("QB", "RB", "WR") and sal[i] <= ctx.get("cheap_salary", 4500)
+    row = np.array([cheap_of(i) for i in pi], float)
+    if row.any():
+        add(row, 0, max(ctx.get("max_cheap", 9) - sum(1 for i in kp if cheap_of(i)), 0))
     k_dst = ctx["max_vs_own_dst"]
     if dst_locked:
         d = team[dst_locked[0]]
@@ -302,7 +307,7 @@ def reevaluate(pool: pd.DataFrame, fpA: np.ndarray, fpB: np.ndarray, currents: l
                elig=eligibility(P.pos), proj=proj, ceil=np.percentile(fpA, 85, axis=1).astype(np.float32),
                fp=fpA[:, :min(fpA.shape[1], 2000)], allow=allow & ~dead, max_per_team=rules.max_per_team,
                game_max=rules.game_max, max_vs_own_dst=rules.max_vs_own_dst, rb_per_team=rules.rb_per_team,
-               min_salary=rules.min_salary,
+               min_salary=rules.min_salary, max_cheap=rules.max_cheap, cheap_salary=rules.cheap_salary,
                # before the first lock every spot is open (a full rebuild per entry): half the options
                # keeps the check under 3 minutes for 190 entries; after a lock few spots are open
                n_opts=int(S("lateswap.options")) if locked.any() else max(10, int(S("lateswap.options")) // 2))

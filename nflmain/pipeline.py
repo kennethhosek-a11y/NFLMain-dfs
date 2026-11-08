@@ -520,7 +520,7 @@ def build(p: Projections, contests: list[Contest], n_sims: int | None = None, n_
     exc = overrides.exposure_exceptions(pool, overrides.load(p.day, p.slate_type, quiet=True))
 
     def make_ext(lus_):
-        e = Extra.from_settings(pos_all, L.shapes(lus_, P), P.sal)
+        e = Extra.from_settings(pos_all, L.shapes(lus_, P, float(S("rules.cheap_salary"))), P.sal)
         e.exceptions = exc
         return e
     ext = make_ext(lus)
