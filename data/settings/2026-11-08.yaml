@@ -5,3 +5,7 @@ portfolio.max_exposure: 0.4
 rules.double_stack_share: 0.25
 rules.bringback_share: 0.40
 afternoon.qb_own_rb: 1
+# Kenny 3:16 PM, today only: defense cap 30% (Afternoon build and Main late swap); QB cap stays 25%.
+# Afternoon player cap 60% is applied only to the Afternoon build (Main stays 40%).
+rules.dst_max_exposure: 0.30
+# Afternoon build used portfolio.max_exposure 0.60 (Kenny 3:16 PM, today only, Afternoon only; applied for that build, Main stays 0.40)
