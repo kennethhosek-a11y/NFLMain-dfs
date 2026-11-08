@@ -228,7 +228,8 @@ def _marginal(top1: np.ndarray, eo: list, has_cur: list) -> np.ndarray:
 
 def choose(entry_opts, scores, swappable, n_players, max_exposure, keep_bonus=1e-4, pos=None):
     """One option per entry maximizing the summed objective, each swappable player in at most
-    max_exposure of entries (locked players aren't counted - they can't move)."""
+    max_exposure of entries (locked players aren't counted - they can't move), and never the same
+    lineup in two entries (Kenny's rule)."""
     from scipy.optimize import Bounds, LinearConstraint, milp
     E = len(entry_opts)
     flat = [(e, o) for e in range(E) for o in range(len(entry_opts[e]))]
@@ -250,6 +251,17 @@ def choose(entry_opts, scores, swappable, n_players, max_exposure, keep_bonus=1e
     cons = [LinearConstraint(A1, 1, 1)]
     if ps and E >= 2:
         cons.append(LinearConstraint(cnt[ps], 0, capv[ps]))
+    by_key: dict = {}
+    for k, (e, o) in enumerate(flat):
+        by_key.setdefault(tuple(sorted(entry_opts[e][o])), set()).add((e, k))
+    dup_rows = []
+    for key, members in by_key.items():
+        if len({e for e, _ in members}) > 1:            # the same lineup offered to 2+ entries
+            row = np.zeros(K)
+            row[[k for _, k in members]] = 1
+            dup_rows.append(row)
+    if dup_rows:
+        cons.append(LinearConstraint(np.array(dup_rows), 0, 1))
     res = milp(-obj, constraints=cons, integrality=np.ones(K), bounds=Bounds(0, 1),
                options={"time_limit": 60, "mip_rel_gap": 0.002})
     if res.x is None:                      # caps can't hold (locked chalk): best per entry
@@ -259,6 +271,17 @@ def choose(entry_opts, scores, swappable, n_players, max_exposure, keep_bonus=1e
         if res.x[k] > 0.5:
             pick[e] = o
     return pick
+
+
+def _legal(lu, P, ctx) -> bool:
+    """DK rules + QB with 1-2 of his pass-catchers + salary floor + no QB facing our DST."""
+    lu = np.asarray(lu)
+    if not L.valid(lu, P) or P.sal[lu].sum() < ctx["min_salary"]:
+        return False
+    q = lu[P.pos[lu] == "QB"][0]
+    d = lu[P.pos[lu] == "DST"][0]
+    mates = sum(1 for i in lu if P.team[i] == P.team[q] and P.pos[i] in ("WR", "TE"))
+    return 1 <= mates <= 2 and P.opp[q] != P.team[d]
 
 
 def reevaluate(pool: pd.DataFrame, fpA: np.ndarray, fpB: np.ndarray, currents: list, contests_of: list,
@@ -273,7 +296,10 @@ def reevaluate(pool: pd.DataFrame, fpA: np.ndarray, fpB: np.ndarray, currents: l
                elig=eligibility(P.pos), proj=proj, ceil=np.percentile(fpA, 85, axis=1).astype(np.float32),
                fp=fpA[:, :min(fpA.shape[1], 2000)], allow=allow & ~dead, max_per_team=rules.max_per_team,
                game_max=rules.game_max, max_vs_own_dst=rules.max_vs_own_dst, rb_per_team=rules.rb_per_team,
-               min_salary=rules.min_salary, n_opts=int(S("lateswap.options")))
+               min_salary=rules.min_salary,
+               # before the first lock every spot is open (a full rebuild per entry): half the options
+               # keeps the check under 3 minutes for 190 entries; after a lock few spots are open
+               n_opts=int(S("lateswap.options")) if locked.any() else max(10, int(S("lateswap.options")) // 2))
     t0 = datetime.now()
     opts = build_options(currents, ctx, seed=seed)
     print(f"[lateswap] options for {len(opts)} entries in {(datetime.now() - t0).seconds}s "
@@ -283,6 +309,7 @@ def reevaluate(pool: pd.DataFrame, fpA: np.ndarray, fpB: np.ndarray, currents: l
     margin, z, n_test = float(S("lateswap.margin")), float(S("portfolio.swap_z")), int(S("lateswap.confirm_options"))
     out = [list(c) if c is not None else None for c in currents]
     log = []
+    taken: set = set()                     # lineups already used by entries of earlier contests
     for cid in dict.fromkeys(contests_of):
         c = contests[cid]
         ent = [k for k, x in enumerate(contests_of) if x == cid]
@@ -290,6 +317,8 @@ def reevaluate(pool: pd.DataFrame, fpA: np.ndarray, fpB: np.ndarray, currents: l
         has = [len(o) > 0 for o in eo]
         ent = [k for k, h in zip(ent, has) if h]
         eo = [o for o in eo if o]
+        # options that would repeat a lineup another contest's entry already has are dropped
+        eo = [[x for j, x in enumerate(o) if j == 0 or tuple(sorted(x)) not in taken] for o in eo]
         if not eo:
             continue
         flat = np.array([sorted(x) for o in eo for x in o])
@@ -314,6 +343,10 @@ def reevaluate(pool: pd.DataFrame, fpA: np.ndarray, fpB: np.ndarray, currents: l
         for i, k in enumerate(ent):
             new = kept[i][pick[i]]
             old = currents[k]
+            if old is not None and sorted(new) != sorted(old) and not _legal(new, P, ctx):   # safety net
+                print(f"[lateswap] entry {k}: the new lineup broke a rule - kept the current one")
+                new = old
+            taken.add(tuple(sorted(new)))
             if old is None or sorted(new) != sorted(old):
                 outs = [p for p in (old or []) if p not in new]
                 ins = [p for p in new if p not in (old or [])]
