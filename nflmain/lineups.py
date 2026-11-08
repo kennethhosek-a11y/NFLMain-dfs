@@ -40,6 +40,14 @@ def key(lu) -> tuple:
     return tuple(sorted(int(x) for x in lu))
 
 
+# ---- Kenny's HARD rules (workbook research/rules, graded Strong; never broken, not settings) ----
+HARD_MIN_SALARY = 49500     # M10: spend at least $49,500
+HARD_STACK_MAX = 2          # M2: at most 2 same-team pass-catchers with the QB
+HARD_STACK_MIN = 1          # M1: the QB always has at least 1 same-team WR/TE
+HARD_NO_DST_VS_QB = True    # M5: never a DST facing our own QB
+HARD_CHALK = (40.0, 1)      # M14: at most 1 player owned 40%+ per lineup (projected ownership)
+
+
 @dataclass
 class Pool:
     """What the optimizer needs to know about each player (same row order as the projections)."""
@@ -49,48 +57,117 @@ class Pool:
     opp: np.ndarray
     game: np.ndarray
     kickoff: np.ndarray    # iso strings (sortable)
+    tgt: np.ndarray | None = None   # target share (for "receiving back" in M7)
+    own: np.ndarray | None = None   # projected ownership % (for M14)
 
     @classmethod
     def from_df(cls, df):
+        g = lambda c: df[c].to_numpy(float) if c in df else None
         return cls(df["Salary"].to_numpy(float), df["pos"].to_numpy(object), df["team"].to_numpy(object),
-                   df["opp"].to_numpy(object), df["game"].to_numpy(object), df["kickoff"].astype(str).to_numpy(object))
+                   df["opp"].to_numpy(object), df["game"].to_numpy(object), df["kickoff"].astype(str).to_numpy(object),
+                   g("tgt_share"), g("Ownership"))
 
 
 @dataclass
 class Rules:
+    """Lineup rules. Hard rules (constants above) always apply; the rest are settings whose defaults
+    are Kenny's workbook values (config/settings.yaml, groups rules.* and per slate type)."""
     stack_min: int = 1
     stack_max: int = 2
     bringback: int = 1          # 0 off, 1 allowed (candidates with and without), 2 required
-    max_per_team: int = 4
+    max_per_team: int = 4       # M8 (SS1: 5 on short slates)
     game_max: int = 5
-    no_offense_vs_dst: bool = True
-    min_salary: int = 0
+    max_vs_own_dst: int = 1     # M6: skill players facing our DST (QBs never: M5)
+    min_salary: int = HARD_MIN_SALARY
+    rb_per_team: int = 1        # M8 (SS2: 2 on short slates)
+    no_qb_team_max: int = 2     # M8: skill players from a team whose QB we don't use
+    qb_own_rb: int = 1          # M7: 0 never, 1 only receiving backs, 2 allowed (SS1)
+    rb_min_tgt: float = 0.12    # M7: "receiving back" = target share at least this
+    hard: bool = True           # False only in research (e.g. the real best lineup, no rules at all)
+
+    def __post_init__(self):            # hard rules can't be loosened by settings
+        if not self.hard:
+            return
+        self.stack_min = max(self.stack_min, HARD_STACK_MIN)
+        self.stack_max = min(max(self.stack_max, self.stack_min), HARD_STACK_MAX)
+        self.min_salary = max(int(self.min_salary), HARD_MIN_SALARY)
 
     @classmethod
     def for_slate(cls, slate_type: str):
         from .settings import for_type, get
         return cls(int(for_type(slate_type, "stack_min")), int(for_type(slate_type, "stack_max")),
-                   int(for_type(slate_type, "bringback")), int(get("portfolio.max_per_team")),
-                   int(for_type(slate_type, "game_max")), bool(int(for_type(slate_type, "no_vs_dst"))))
+                   int(for_type(slate_type, "bringback")), int(for_type(slate_type, "max_per_team")),
+                   int(for_type(slate_type, "game_max")), int(for_type(slate_type, "max_vs_own_dst")),
+                   int(get("build.min_salary")), int(for_type(slate_type, "rb_per_team")),
+                   int(get("rules.no_qb_team_max")), int(for_type(slate_type, "qb_own_rb")),
+                   float(get("rules.rb_min_tgt")))
+
+
+def violations(lu, P: Pool, rules: Rules | None = None) -> list[str]:
+    """Every DK rule and lineup rule this lineup breaks (empty = legal)."""
+    lu = np.asarray(lu)
+    out = []
+    if len(set(lu.tolist())) != ROSTER:
+        return ["duplicate player"]
+    if P.sal[lu].sum() > CAP:
+        out.append("over the cap")
+    pos = list(P.pos[lu])
+    c = {p: pos.count(p) for p in ("QB", "RB", "WR", "TE", "DST")}
+    if c["QB"] != 1 or c["DST"] != 1 or not (2 <= c["RB"] <= 3 and 3 <= c["WR"] <= 4 and 1 <= c["TE"] <= 2) \
+            or c["RB"] + c["WR"] + c["TE"] != 7:
+        return out + ["positions"]
+    if len(set(P.game[lu])) < 2:
+        out.append("one game")
+    if rules is None:
+        return out
+    team, opp = P.team[lu], P.opp[lu]
+    q = lu[P.pos[lu] == "QB"][0]
+    d = lu[P.pos[lu] == "DST"][0]
+    mates = sum(1 for i in lu if P.team[i] == P.team[q] and P.pos[i] in ("WR", "TE"))
+    if P.sal[lu].sum() < rules.min_salary:
+        out.append("salary floor")
+    if mates < rules.stack_min or mates > rules.stack_max:
+        out.append("QB stack size")
+    if rules.hard and HARD_NO_DST_VS_QB and P.opp[q] == P.team[d]:
+        out.append("DST vs own QB")
+    if sum(1 for i in lu if P.opp[i] == P.team[d] and P.pos[i] in ("RB", "WR", "TE")) > rules.max_vs_own_dst:
+        out.append("too many vs own DST")
+    if np.unique(team, return_counts=True)[1].max() > rules.max_per_team:
+        out.append("max per team")
+    if np.unique(P.game[lu], return_counts=True)[1].max() > rules.game_max:
+        out.append("max per game")
+    rbs = [i for i in lu if P.pos[i] == "RB"]
+    if rbs and np.unique(P.team[rbs], return_counts=True)[1].max() > rules.rb_per_team:
+        out.append("RBs per team")
+    for t in set(team) - {P.team[q]}:
+        if sum(1 for i in lu if P.team[i] == t and P.pos[i] in ("RB", "WR", "TE")) > rules.no_qb_team_max:
+            out.append("skill players without their QB")
+            break
+    own_rb = [i for i in rbs if P.team[i] == P.team[q]]
+    if own_rb and (rules.qb_own_rb == 0 or (rules.qb_own_rb == 1 and (
+            P.tgt is None or any(P.tgt[i] < rules.rb_min_tgt for i in own_rb)))):
+        out.append("QB with own RB")
+    if rules.hard and P.own is not None and (P.own[lu] >= HARD_CHALK[0]).sum() > HARD_CHALK[1]:
+        out.append("two 40%+ owned players")
+    return out
+
+
+def shapes(lus: np.ndarray, P: Pool) -> dict:
+    """Per lineup: QB + exactly 2 pass-catchers (double), exactly 1 bring-back (opposing RB/WR/TE),
+    TE in FLEX (two TEs) - the workbook's portfolio shares (M1, M4, M11)."""
+    out = {"double": [], "bringback": [], "te_flex": []}
+    for lu in np.atleast_2d(lus):
+        q = lu[P.pos[lu] == "QB"][0]
+        mates = sum(1 for i in lu if P.team[i] == P.team[q] and P.pos[i] in ("WR", "TE"))
+        bb = sum(1 for i in lu if P.team[i] == P.opp[q] and P.pos[i] in ("RB", "WR", "TE"))
+        out["double"].append(mates == 2)
+        out["bringback"].append(bb == 1)
+        out["te_flex"].append(int((P.pos[lu] == "TE").sum()) == 2)
+    return {k: np.array(v, bool) for k, v in out.items()}
 
 
 def valid(lu, P: Pool, rules: Rules | None = None) -> bool:
-    lu = np.asarray(lu)
-    if len(set(lu.tolist())) != ROSTER or P.sal[lu].sum() > CAP:
-        return False
-    pos = list(P.pos[lu])
-    c = {p: pos.count(p) for p in ("QB", "RB", "WR", "TE", "DST")}
-    if c["QB"] != 1 or c["DST"] != 1 or not (2 <= c["RB"] <= 3 and 3 <= c["WR"] <= 4 and 1 <= c["TE"] <= 2):
-        return False
-    if c["RB"] + c["WR"] + c["TE"] != 7 or len(set(P.game[lu])) < 2:
-        return False
-    if rules is not None:
-        t, cnt = np.unique(P.team[lu], return_counts=True)
-        if cnt.max() > rules.max_per_team:
-            return False
-        if np.unique(P.game[lu], return_counts=True)[1].max() > rules.game_max:
-            return False
-    return True
+    return not violations(lu, P, rules)
 
 
 def assign_slots(lu, P: Pool) -> list[int]:
@@ -147,24 +224,40 @@ class Optimizer:
         add(np.r_[np.zeros(n), np.ones(G)], 2, np.inf)   # 2+ games
         pc = np.isin(P.pos, ["WR", "TE"])
         skill = np.isin(P.pos, ["RB", "WR", "TE"])
-        off = np.isin(P.pos, ["QB", "RB", "WR", "TE"])
+        M = 8
         for t in sorted(set(P.team)):
             qb = ((P.team == t) & (P.pos == "QB")).astype(float)
-            if not qb.any():
-                continue
-            mates = ((P.team == t) & pc).astype(float)
-            if rules.stack_min > 0:              # pass-catchers >= stack_min * QB
-                add(np.r_[mates - rules.stack_min * qb, z], 0, np.inf)
-            if rules.bringback >= 2:            # an opposing skill player whenever this QB is used
-                opp = ((P.opp == t) & skill).astype(float)
-                add(np.r_[opp - qb, z], 0, np.inf)
-        if rules.no_offense_vs_dst:
-            for t in sorted(set(P.team)):
-                d = ((P.team == t) & (P.pos == "DST")).astype(float)
-                if not d.any():
-                    continue
-                facing = ((P.opp == t) & off).astype(float)
-                add(np.r_[facing + 8 * d, z], 0, 8)  # if DST t is used, nobody facing it
+            on_t = (P.team == t)
+            # M8: at most rb_per_team RBs from one team
+            add(np.r_[(on_t & (P.pos == "RB")).astype(float), z], 0, rules.rb_per_team)
+            if qb.any():
+                mates = (on_t & pc).astype(float)
+                if rules.stack_min > 0:
+                    add(np.r_[mates - rules.stack_min * qb, z], 0, np.inf)      # M1 (hard): >= 1
+                add(np.r_[mates + M * qb, z], -np.inf, rules.stack_max + M)     # M2 (hard): <= 2
+                if rules.bringback >= 2:
+                    opp = ((P.opp == t) & skill).astype(float)
+                    add(np.r_[opp - qb, z], 0, np.inf)
+                # M8: skill players from a team whose QB isn't used: <= no_qb_team_max
+                add(np.r_[(on_t & skill).astype(float) - M * qb, z], -np.inf, rules.no_qb_team_max)
+                # M7: QB with his own RB only if the back is a receiver (mode 1) / never (mode 0)
+                if rules.qb_own_rb < 2:
+                    tg = P.tgt if P.tgt is not None else np.zeros(n)
+                    bad = on_t & (P.pos == "RB") & ((tg < rules.rb_min_tgt) if rules.qb_own_rb == 1 else True)
+                    if bad.any():
+                        add(np.r_[bad.astype(float) + M * qb, z], -np.inf, M)
+            d = (on_t & (P.pos == "DST")).astype(float)
+            if d.any():
+                facing_skill = ((P.opp == t) & skill).astype(float)
+                k = rules.max_vs_own_dst                                       # M6
+                add(np.r_[facing_skill + (M - k) * d, z], -np.inf, M)
+                if HARD_NO_DST_VS_QB and rules.hard:                            # M5 (hard)
+                    facing_qb = ((P.opp == t) & (P.pos == "QB")).astype(float)
+                    add(np.r_[facing_qb + d, z], -np.inf, 1)
+        if P.own is not None and rules.hard:                                     # M14 (hard)
+            chalk = (P.own >= HARD_CHALK[0]).astype(float)
+            if chalk.sum() > HARD_CHALK[1]:
+                add(np.r_[chalk, z], 0, HARD_CHALK[1])
         self.A, self.lo, self.hi = np.array(rows), np.array(lo, float), np.array(hi, float)
         self.base = [LinearConstraint(self.A, self.lo, self.hi)]
         self.ub = np.r_[np.ones(n) if eligible is None else (np.asarray(eligible) > 0).astype(float), np.ones(G)]
@@ -199,8 +292,6 @@ class Optimizer:
             if qb_mates is not None:            # mates >= k*qb and mates <= k + M(1-qb)
                 rows.append(np.r_[mates - qb_mates * qb, z]); lo.append(0); hi.append(np.inf)
                 rows.append(np.r_[mates + M * qb, z]); lo.append(-np.inf); hi.append(qb_mates + M)
-            else:
-                rows.append(np.r_[mates + M * qb, z]); lo.append(-np.inf); hi.append(self.rules.stack_max + M)
             if bringback is not None:
                 opp = ((P.opp == t) & self._skill).astype(float)
                 rows.append(np.r_[opp - bringback * qb, z]); lo.append(0); hi.append(np.inf)

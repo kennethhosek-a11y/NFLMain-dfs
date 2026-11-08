@@ -51,7 +51,7 @@ def study(p, n_slates: int = 6, n_truth: int = 40, seed: int = 0) -> pd.DataFram
             fp = p.fp[idx]
             df = sub.reset_index(drop=True)
             P = L.Pool.from_df(df)
-            rules = L.Rules(stack_min=0, bringback=0, game_max=8, max_per_team=8, no_offense_vs_dst=False)
+            rules = L.Rules(stack_min=0, stack_max=8, bringback=0, game_max=8, max_per_team=8, max_vs_own_dst=8, min_salary=0, rb_per_team=3, no_qb_team_max=8, qb_own_rb=2, hard=False)
             opt = L.Optimizer(P, rules)
             best = opt.solve(df["Projection"].to_numpy())
             if best is None:

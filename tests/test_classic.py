@@ -63,13 +63,19 @@ def test_projections_follow_vegas(proj):
 
 def _check_rules(lu, pool, rules):
     P = L.Pool.from_df(pool)
-    assert L.valid(lu, P, rules)
-    pos, team, opp = P.pos[lu], P.team[lu], P.opp[lu]
-    q = lu[pos == "QB"][0]
+    assert L.violations(lu, P, rules) == []
+    q = lu[P.pos[lu] == "QB"][0]
     mates = sum(1 for i in lu if P.team[i] == P.team[q] and P.pos[i] in ("WR", "TE"))
-    assert mates >= rules.stack_min
-    d = lu[pos == "DST"][0]
-    assert not any(P.opp[i] == P.team[d] and P.pos[i] != "DST" for i in lu)
+    assert 1 <= mates <= 2                                          # hard M1 / M2
+    d = lu[P.pos[lu] == "DST"][0]
+    assert P.opp[q] != P.team[d]                                    # hard M5
+    assert P.sal[lu].sum() >= L.HARD_MIN_SALARY                     # hard M10
+    assert sum(1 for i in lu if P.opp[i] == P.team[d] and P.pos[i] != "DST") <= rules.max_vs_own_dst
+
+
+def test_hard_rules_cannot_be_loosened():
+    r = L.Rules(stack_min=0, stack_max=3, min_salary=40000)
+    assert r.stack_min == 1 and r.stack_max == 2 and r.min_salary == 49500
 
 
 def test_optimizer_stacks_and_rules(proj):
@@ -102,6 +108,13 @@ def test_build_portfolio_rules(proj):
     SET.override("build.worlds", 120)
     SET.override("build.field_sample", 3000)
     SET.override("build.workers", 1)
+    # the synthetic slate has only 6 teams: the workbook's QB/DST caps and shape shares can't all
+    # hold there together with 0-or-5+ (a real 22-team slate can); test the core rules here
+    SET.override("rules.qb_max_exposure", 1.0)
+    SET.override("rules.dst_max_exposure", 1.0)
+    SET.override("rules.share_band", 1.0)
+    for k, v in (("main.rb_per_team", 2), ("main.qb_own_rb", 2), ("rules.no_qb_team_max", 8), ("main.max_per_team", 5)):
+        SET.override(k, v)
     c = C.Contest("1", "test", 1.0, 5000, entry_ids=[str(i) for i in range(12)], prize_pool=4000)
     res = pipeline.build(proj, [c])
     lus = np.array(res.picks["1"])
@@ -111,6 +124,9 @@ def test_build_portfolio_rules(proj):
         _check_rules(lu, res.pool, rules)
     cnt = np.bincount(lus.ravel())
     assert cnt.max() <= portfolio.caps(12)                  # 50% cap
+    for k in ("rules.qb_max_exposure", "rules.dst_max_exposure", "rules.share_band", "main.rb_per_team",
+              "main.qb_own_rb", "rules.no_qb_team_max", "main.max_per_team"):
+        SET._overrides.pop(k, None)
     assert len({L.key(x) for x in lus}) == 12               # no lineup twice
     used = cnt[cnt > 0]
     assert (used >= 5).all() or "0-or-" in str(res.plan)    # 0-or-5+ (or reported step-down)
@@ -161,3 +177,21 @@ def test_lateswap_never_moves_locked_players(proj):
         assert P.sal[new].sum() <= slate.CAP
         assert all(new[s] in [i for i in range(len(pool)) if P.pos[i] in slate.SLOT_POS[s]] for s in range(9))
     assert open_in_0[0] not in res["lineups"][0]
+
+
+def test_workbook_portfolio_rules():
+    """QB / DST exposure caps, shape shares and 2+ different players, on made-up candidates."""
+    rng = np.random.default_rng(3)
+    pos = np.array(["QB"] * 8 + ["DST"] * 8 + ["WR"] * 40, dtype=object)
+    lus = np.array([np.sort(np.r_[rng.choice(8), 8 + rng.choice(8), 16 + rng.choice(40, 7, replace=False)])
+                    for _ in range(400)])
+    m = {"top1": rng.random((400, 300)) < 0.05, "cash": rng.random((400, 300)) < 0.2,
+         "beat": rng.random((400, 300)), "pay": rng.random((400, 300))}
+    props = {"double": rng.random(400) < 0.5, "bringback": rng.random(400) < 0.5, "te_flex": rng.random(400) < 0.1}
+    ext = portfolio.Extra(pos, props, {"double": (0.4, 0.6), "bringback": (0.4, 0.6), "te_flex": (0.0, 0.1)},
+                          {"QB": 0.25, "DST": 0.15}, min_unique=2)
+    ch = portfolio.joint(m, lus, 40, True, extra=ext, time_limit=30)
+    assert len(ch) == 40
+    cnt = np.bincount(lus[ch].ravel(), minlength=56)
+    assert cnt[:8].max() <= 10 and cnt[8:16].max() <= 6          # QB 25%, DST 15% of 40
+    assert 16 <= props["double"][ch].sum() <= 24 and props["te_flex"][ch].sum() <= 4

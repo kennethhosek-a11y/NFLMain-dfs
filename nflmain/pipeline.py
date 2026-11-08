@@ -25,7 +25,7 @@ from . import gamesim, overrides, ownership, project, slate, sources
 from . import lineups as L
 from .contests import Contest, evaluate, field_dupe_rate
 from .parallel import pmap_init
-from .portfolio import caps, confirm_swaps, min_count, per_sim_value, select
+from .portfolio import Extra, caps, confirm_swaps, meets_min_count, min_count, per_sim_value, select
 from .settings import for_type
 from .settings import get as S
 
@@ -399,7 +399,8 @@ def sims_for(p: Projections, pool: pd.DataFrame, n: int, seed: int, live_fn=None
     return fp
 
 
-def core_players(chosen: np.ndarray, pool: pd.DataFrame, n: int, k: int, proj: np.ndarray) -> np.ndarray:
+def core_players(chosen: np.ndarray, pool: pd.DataFrame, n: int, k: int, proj: np.ndarray, ext=None,
+                 widen: float = 1.0) -> np.ndarray:
     """The players a 0-or-k+ portfolio of n lineups is built from, most-used first (ties:
     projection), keeping enough at each position to fill lineups. Size: at most 9n/k (everyone
     can reach k lineups) but comfortably more than 9n/cap (nobody has to pass the exposure cap)."""
@@ -408,9 +409,13 @@ def core_players(chosen: np.ndarray, pool: pd.DataFrame, n: int, k: int, proj: n
     slots = 9 * n
     cap = caps(n)
     # each position needs one more player than the cap strictly requires, so there is room to choose
-    need = {"QB": -(-n // cap) + 1, "RB": -(-2 * n // cap) + 1, "WR": -(-3 * n // cap) + 1,
-            "TE": -(-n // cap) + 1, "DST": -(-n // cap) + 1}
-    limit = max(int(slots / k), sum(need.values()))
+    pc = (ext.pos_caps if ext is not None else {})
+    cq = max(k, int(np.floor(pc.get("QB", 1.0) * n + 1e-9)), 1) if "QB" in pc else cap
+    cd = max(k, int(np.floor(pc.get("DST", 1.0) * n + 1e-9)), 1) if "DST" in pc else cap
+    need = {"QB": -(-n // min(cq, cap)) + 1, "RB": -(-2 * n // cap) + 1, "WR": -(-3 * n // cap) + 1,
+            "TE": -(-n // cap) + 1, "DST": -(-n // min(cd, cap)) + 1}
+    need = {p_: int(np.ceil(m * widen)) for p_, m in need.items()}
+    limit = max(int(widen * slots / k), sum(need.values()))
     order = used[np.lexsort((-proj[used], -cnt[used]))]
     pos = pool["pos"].to_numpy(object)
     if any((pos[used] == p_).sum() < m for p_, m in need.items()):      # first portfolio too narrow:
@@ -472,13 +477,21 @@ def build(p: Projections, contests: list[Contest], n_sims: int | None = None, n_
     # quality floor: salary and projection (relaxed step by step only if entries can't be filled)
     lproj = L.scores(lus, proj_all[:, None])[:, 0]
     best_proj = lproj.max()
-    floors = [(min_frac, min_salary), (0.80, 48000), (0.75, 47000), (0.0, 0)]
+    # salary never relaxes below the hard $49,500 floor (workbook M10); only the projection floor does
+    floors = [(min_frac, min_salary), (0.80, min_salary), (0.75, min_salary), (0.0, min_salary)]
     for frac, msal in floors:
         keep = (L.salary(lus, P.sal) >= msal) & (lproj >= frac * best_proj)
         if keep.sum() >= min(600, 10 * big_n + 100) or frac == 0:
             break
     lus = lus[keep]
-    floor_note = "" if (frac, msal) == floors[0] else f"quality floor relaxed to {frac:.0%} / ${msal:,}"
+    floor_note = "" if (frac, msal) == floors[0] else f"quality floor relaxed to {frac:.0%} of the best projection"
+    # workbook M13 (soft): lineup total ownership 75-150% - applied only while enough candidates remain
+    osum = own[lus].sum(axis=1)
+    band = (osum >= float(S("rules.own_sum_min"))) & (osum <= float(S("rules.own_sum_max")))
+    if band.sum() >= min(400, 6 * big_n + 60):
+        lus = lus[band]
+    else:
+        print(f"[build] ownership band 75-150% left too few lineups ({int(band.sum())}); not applied")
     # cap-aware passes so balanced portfolios exist to choose from (big entry counts)
     if big_n >= 5:
         opt = L.Optimizer(P, rules, ((proj_all > 0.3) & allow).astype(float))
@@ -502,6 +515,8 @@ def build(p: Projections, contests: list[Contest], n_sims: int | None = None, n_
             print(f"[build] + cap-aware portfolio builds -> {len(lus)} candidates")
     dupe, scA, scB = score_all(lus)
     stk = stack_team(lus, pool)
+    pos_all = pool["pos"].to_numpy(object)
+    ext = Extra.from_settings(pos_all, L.shapes(lus, P))
     picks, plan, rows = {}, [], []
     used: set[int] = set()
     for c in contests:
@@ -509,37 +524,44 @@ def build(p: Projections, contests: list[Contest], n_sims: int | None = None, n_
         mA = evaluate(scA, fld, fpA, c, dupe)
         k0 = min_count(n, True)
         t1 = datetime.now()
-        chosen = select(mA, lus, n, c.large, exclude=used, initial=False, stack=stk, quiet=True)
+        chosen = select(mA, lus, n, c.large, exclude=used, initial=False, stack=stk, quiet=True, extra=ext)
         if k0 > 1 and len(chosen) == n:
             # 0-or-5+ rule: rebuild candidates from only the players this first portfolio uses, so
             # lineups share players, then pick the whole set again with the rule on
-            U = core_players(lus[chosen], pool, n, k0, proj_all)
-            eu = np.zeros(len(pool))
-            eu[U] = 1.0
-            eu *= ((proj_all > 0.3) & allow)
-            jobs = [(fpA[:, s], {}) for s in rng.choice(fpA.shape[1], size=min(600, 25 * n), replace=False)]
-            jobs += [(proj_all * rng.lognormal(0, 0.2, len(proj_all)), {}) for _ in range(min(150, 5 * n))]
-            new = solve_many(P, rules, eu, jobs)
-            if new:
-                new = np.unique(L.canon(np.array(new)), axis=0)
-                npj = L.scores(new, proj_all[:, None])[:, 0]
-                new = new[(L.salary(new, P.sal) >= msal) & (npj >= frac * best_proj)]
-                have = {L.key(x) for x in lus}
-                new = np.array([x for x in new if L.key(x) not in have]).reshape(-1, L.ROSTER)
-                if len(new):
-                    lus = np.vstack([lus, new])               # append: earlier indices stay valid
-                    dupe, scA, scB = score_all(lus)
-                    stk = stack_team(lus, pool)
-                    mA = evaluate(scA, fld, fpA, c, dupe)
-            inside = np.isin(lus, U).all(axis=1)
-            outside = set(np.flatnonzero(~inside).tolist())
-            ch = select(mA, lus, n, c.large, exclude=used | outside, initial=True, stack=stk)
-            if len(ch) == n:
-                chosen = ch
+            for widen in (1.0, 1.6, 2.4):
+                U = core_players(lus[chosen], pool, n, k0, proj_all, ext, widen)
+                eu = np.zeros(len(pool))
+                eu[U] = 1.0
+                eu *= ((proj_all > 0.3) & allow)
+                jobs = [(fpA[:, s], {}) for s in rng.choice(fpA.shape[1], size=min(600, 25 * n), replace=False)]
+                jobs += [(proj_all * rng.lognormal(0, 0.2, len(proj_all)), {}) for _ in range(min(150, 5 * n))]
+                new = solve_many(P, rules, eu, jobs)
+                if new:
+                    new = np.unique(L.canon(np.array(new)), axis=0)
+                    npj = L.scores(new, proj_all[:, None])[:, 0]
+                    new = new[(L.salary(new, P.sal) >= msal) & (npj >= frac * best_proj)]
+                    have = {L.key(x) for x in lus}
+                    new = np.array([x for x in new if L.key(x) not in have]).reshape(-1, L.ROSTER)
+                    if len(new):
+                        lus = np.vstack([lus, new])               # append: earlier indices stay valid
+                        dupe, scA, scB = score_all(lus)
+                        stk = stack_team(lus, pool)
+                        ext = Extra.from_settings(pos_all, L.shapes(lus, P))
+                        mA = evaluate(scA, fld, fpA, c, dupe)
+                inside = np.isin(lus, U).all(axis=1)
+                outside = set(np.flatnonzero(~inside).tolist())
+                ch = select(mA, lus, n, c.large, exclude=used | outside, initial=True, stack=stk, extra=ext,
+                            quiet=widen < 2.4)
+                if len(ch) == n and meets_min_count(ch, lus, n, True):
+                    chosen = ch
+                    break
+                if len(ch) == n and widen == 2.4:
+                    chosen = ch
+                    print(f"[build] 0-or-{k0}+ couldn't be fully met; nearest portfolio used")
             print(f"[build] 0-or-{k0}+ pass: {int(inside.sum())} lineups from the portfolio's {len(U)} players "
                   f"({(datetime.now() - t1).seconds}s)")
         mB = evaluate(scB, fld, fpB, c, dupe)
-        chosen, log = confirm_swaps(chosen, mA, mB, lus, c.large, exclude=used, initial=True, stack=stk)
+        chosen, log = confirm_swaps(chosen, mA, mB, lus, c.large, exclude=used, initial=True, stack=stk, extra=ext)
         used.update(chosen)
         picks[c.id] = [lus[i] for i in chosen]
         vB = per_sim_value(mB, chosen, c.large) if chosen else np.zeros(1)
