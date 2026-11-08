@@ -22,17 +22,17 @@
    "note": "quality floor relaxed to 75% of the best projection",
    "payouts": "estimated",
    "objective": "top-1% (portfolio)",
-   "p_any_top1": 0.4818,
-   "avg_top1": 0.04906,
-   "cash": 0.47809,
-   "roi_reported": 14.347234725952148,
-   "value": 0.7271,
+   "p_any_top1": 0.5856,
+   "avg_top1": 0.06661,
+   "cash": 0.57165,
+   "roi_reported": 23.43796157836914,
+   "value": 0.91865,
    "swaps": [],
    "stacks": {
     "NYJ": 5,
-    "SF": 5,
-    "DAL": 5,
-    "NE": 5
+    "LV": 5,
+    "WAS": 5,
+    "SF": 5
    },
    "slate": "main"
   },
@@ -46,17 +46,17 @@
    "note": "quality floor relaxed to 75% of the best projection",
    "payouts": "estimated",
    "objective": "top-1% (portfolio)",
-   "p_any_top1": 0.4354,
-   "avg_top1": 0.04278,
-   "cash": 0.4489,
-   "roi_reported": 9.062329292297363,
-   "value": 0.6493,
+   "p_any_top1": 0.3918,
+   "avg_top1": 0.03405,
+   "cash": 0.41534,
+   "roi_reported": 5.806872844696045,
+   "value": 0.56205,
    "swaps": [],
    "stacks": {
-    "LV": 5,
-    "WAS": 5,
+    "SF": 5,
     "SEA": 5,
-    "DAL": 5
+    "CAR": 5,
+    "MIA": 5
    },
    "slate": "main"
   },
@@ -70,49 +70,125 @@
    "note": "quality floor relaxed to 75% of the best projection",
    "payouts": "estimated",
    "objective": "top-1% (portfolio)",
-   "p_any_top1": 0.9626,
-   "avg_top1": 0.061137333333333335,
-   "cash": 0.5291226666666666,
-   "roi_reported": 34.25258255004883,
-   "value": 1.2682866666666666,
+   "p_any_top1": 0.961,
+   "avg_top1": 0.060213333333333334,
+   "cash": 0.5109106666666666,
+   "roi_reported": 40.07139205932617,
+   "value": 1.2620666666666667,
    "swaps": [
     {
+     "slot": 1,
+     "out": 124,
+     "in": 2214,
+     "gain_B": 0.0003600000000000015,
+     "se_B": 0.000256793349057914,
+     "accepted": false
+    },
+    {
+     "slot": 2,
+     "out": 160,
+     "in": 2214,
+     "gain_B": 6.000000000000063e-05,
+     "se_B": 0.0002613887065699197,
+     "accepted": false
+    },
+    {
      "slot": 3,
-     "out": 1573,
-     "in": 1572,
-     "gain_B": 0.0002666666666666659,
-     "se_B": 0.00039261933357812506,
+     "out": 2210,
+     "in": 2214,
+     "gain_B": 0.00040666666666666683,
+     "se_B": 0.0002705209063207422,
      "accepted": false
     },
     {
-     "slot": 5,
-     "out": 961,
-     "in": 963,
-     "gain_B": -0.0004000000000000001,
-     "se_B": 0.00019176901488773989,
+     "slot": 4,
+     "out": 2165,
+     "in": 2214,
+     "gain_B": 0.0004400000000000007,
+     "se_B": 0.00034523197566767294,
      "accepted": false
     },
     {
-     "slot": 13,
-     "out": 917,
-     "in": 1572,
-     "gain_B": 0.0011866666666666668,
-     "se_B": 0.00034099113297611044,
+     "slot": 7,
+     "out": 1353,
+     "in": 2214,
+     "gain_B": 0.0006466666666666674,
+     "se_B": 0.0002907078334532946,
+     "accepted": true
+    },
+    {
+     "slot": 10,
+     "out": 1246,
+     "in": 83,
+     "gain_B": 0.0004533333333333319,
+     "se_B": 0.0003553804552060754,
+     "accepted": false
+    },
+    {
+     "slot": 14,
+     "out": 1386,
+     "in": 1353,
+     "gain_B": 0.0002133333333333334,
+     "se_B": 0.00015142264320267964,
+     "accepted": false
+    },
+    {
+     "slot": 15,
+     "out": 1175,
+     "in": 83,
+     "gain_B": 0.0009199999999999996,
+     "se_B": 0.0003468417856736733,
+     "accepted": true
+    },
+    {
+     "slot": 26,
+     "out": 1168,
+     "in": 154,
+     "gain_B": 0.0014,
+     "se_B": 0.00018077943164875843,
+     "accepted": true
+    },
+    {
+     "slot": 33,
+     "out": 2204,
+     "in": 159,
+     "gain_B": 0.0012466666666666665,
+     "se_B": 0.00016304407381850718,
+     "accepted": true
+    },
+    {
+     "slot": 41,
+     "out": 1555,
+     "in": 1978,
+     "gain_B": 0.0001866666666666668,
+     "se_B": 0.0004417501226444577,
+     "accepted": false
+    },
+    {
+     "slot": 87,
+     "out": 1521,
+     "in": 1353,
+     "gain_B": 0.0019866666666666665,
+     "se_B": 0.00034089830040516875,
      "accepted": true
     }
    ],
    "stacks": {
-    "NYJ": 35,
     "LV": 34,
-    "WAS": 24,
-    "DET": 9,
-    "SF": 9,
-    "NE": 7,
-    "CAR": 7,
-    "SEA": 7,
-    "NYG": 7,
-    "DAL": 6,
-    "IND": 5
+    "NYJ": 26,
+    "WAS": 16,
+    "SF": 15,
+    "NE": 9,
+    "NYG": 5,
+    "HOU": 5,
+    "MIA": 5,
+    "IND": 5,
+    "CAR": 5,
+    "LAR": 5,
+    "KC": 5,
+    "SEA": 5,
+    "DAL": 5,
+    "DET": 5
    },
    "slate": "main"
   }
