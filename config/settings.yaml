@@ -19,14 +19,13 @@ build:
   proj_sims:     {default: 10000, min: 3000,  max: 50000, type: int,   label: "Simulations for projections", help: "Simulated slates behind every projection, floor and ceiling."}
   worlds:        {default: 600,   min: 50,    max: 1500,  type: int,   label: "Simulated slates used to make candidate lineups", help: "The best lineup (under the stacking rules) in each of this many simulated slates becomes a candidate."}
   field_sample:  {default: 10000, min: 2000,  max: 50000, type: int,   label: "Simulated opponent lineups", help: "Opponent lineups drawn from projected ownership to rank yours against."}
-  min_salary:    {default: 48500, min: 44000, max: 50000, type: int,   label: "Minimum salary per lineup", help: "Never enter a lineup that spends less than this."}
+  min_salary:    {default: 49500, min: 49500, max: 50000, type: int,   label: "Minimum salary per lineup", help: "Kenny's hard rule M10: never below $49,500 (can only be raised)."}
   min_proj_frac: {default: 0.85,  min: 0.5,   max: 1.0,   type: float, label: "Minimum lineup projection (share of best)", help: "Never enter a lineup projected below this share of the best lineup."}
   workers:       {default: 4,     min: 1,     max: 16,    type: int,   label: "Parallel processes", help: "Worker processes for candidate builds and late-swap options (spawned, never forked)."}
 
 portfolio:
   max_exposure:  {default: 0.5, min: 0.1, max: 1.0,  type: float, label: "Max exposure per player", help: "Largest share of your lineups any one player can be in (0.5 = 50%). Always at least 1 lineup."}
   min_count:     {default: 5,   min: 1,   max: 30,   type: int,   label: "Minimum lineups for a player you use", help: "Initial build only: each player is in 0 lineups or at least this many (contests with 10+ entries). Off after the first lock. 1 = off."}
-  max_per_team:  {default: 4,   min: 2,   max: 8,    type: int,   label: "Max players from one team", help: "Per lineup, out of 9 (DST counts)."}
   top1_weight:   {default: 5.0, min: 0.0, max: 20.0, type: float, label: "Top-heavy vs spread out", help: "Large contests: P(at least one lineup top 1%) + this x the average top-1% rate."}
   swap_z:        {default: 2.0, min: 1.0, max: 4.0,  type: float, label: "Swap confidence (standard errors)", help: "A swap must win on independent simulations by more than this many standard errors."}
   swap_tries:    {default: 12,  min: 1,   max: 50,   type: int,   label: "Swap options tried per lineup", help: ""}
@@ -73,40 +72,71 @@ news:
 
 # ---- per slate type -------------------------------------------------------------------------
 # stack_min:   pass-catchers (WR/TE) from the QB's team, always (hard rule)
-# stack_max:   most pass-catchers with the QB tried in candidate builds
+# stack_max:   most pass-catchers with the QB (hard cap 2, workbook M2)
 # bringback:   1 = candidate builds also include QB stacks with an opposing skill player (the
 #              portfolio picks how many by simulation); 2 = every lineup must have one
 # gate_pct:    ceiling gate - drop the bottom share of playable players by how often they reach
 #              the slate's winning pace (0 = off)
 # game_max:    most players from one game
-# no_vs_dst:   1 = never a QB/RB/WR/TE facing our own DST. Backtest 11/07/2026 (research/backtest):
-#              real best lineups had a hitter vs their own DST on 13% of Main and 18% of Early slates
-#              but 52% of Afternoon and 64% of Thanksgiving slates -> off on the small slates
+# Workbook rules (research/rules, NFL Main M6-M8 and Short Slate Changes SS1-SS2), defaults = workbook:
+# max_vs_own_dst: RB/WR/TE facing our own DST (M6: 1). A QB facing our DST is never allowed (M5, hard).
+# max_per_team:   players from one team (M8: 4; SS1 short slates: 5)
+# rb_per_team:    RBs from one team (M8: 1; SS2 short slates: 2)
+# qb_own_rb:      QB with his own RB: 0 never, 1 only a receiving back (M7), 2 allowed (SS1 short slates)
 early:
   stack_min: {default: 1,    min: 0, max: 3,    type: int,   label: "Early: pass-catchers with the QB (minimum)", help: ""}
-  stack_max: {default: 2,    min: 1, max: 3,    type: int,   label: "Early: pass-catchers with the QB (most tried)", help: ""}
+  stack_max: {default: 2,    min: 1, max: 2,    type: int,   label: "Early: pass-catchers with the QB (most tried)", help: ""}
   bringback: {default: 1,    min: 0, max: 2,    type: int,   label: "Early: bring-backs (0 off, 1 allowed, 2 required)", help: ""}
   gate_pct:  {default: 0.10, min: 0.0, max: 0.5, type: float, label: "Early: ceiling gate (share dropped)", help: "Start = NBA backtest for 5-7 game slates; NFL backtest in research/gates."}
   game_max:  {default: 5,    min: 3, max: 8,    type: int,   label: "Early: most players from one game", help: ""}
-  no_vs_dst: {default: 1,    min: 0, max: 1,    type: int,   label: "Early: no hitters against your own defense", help: ""}
+  max_vs_own_dst: {default: 1, min: 0, max: 3, type: int, label: "Early: most RB/WR/TE facing your own DST", help: "Workbook M6."}
+  max_per_team:   {default: 4, min: 2, max: 8, type: int, label: "Early: most players from one team", help: "Workbook M8."}
+  rb_per_team:    {default: 1, min: 1, max: 3, type: int, label: "Early: most RBs from one team", help: "Workbook M8."}
+  qb_own_rb:      {default: 1, min: 0, max: 2, type: int, label: "Early: QB with his own RB (0 never, 1 receiving back only, 2 allowed)", help: "Workbook M7."}
 main:
   stack_min: {default: 1,    min: 0, max: 3,    type: int,   label: "Main: pass-catchers with the QB (minimum)", help: ""}
-  stack_max: {default: 2,    min: 1, max: 3,    type: int,   label: "Main: pass-catchers with the QB (most tried)", help: ""}
+  stack_max: {default: 2,    min: 1, max: 2,    type: int,   label: "Main: pass-catchers with the QB (most tried)", help: ""}
   bringback: {default: 1,    min: 0, max: 2,    type: int,   label: "Main: bring-backs (0 off, 1 allowed, 2 required)", help: ""}
   gate_pct:  {default: 0.15, min: 0.0, max: 0.5, type: float, label: "Main: ceiling gate (share dropped)", help: "Start = NBA backtest for 8+ game slates (a flat 25% threw out 15-22% of the real best lineup)."}
   game_max:  {default: 5,    min: 3, max: 8,    type: int,   label: "Main: most players from one game", help: ""}
-  no_vs_dst: {default: 1,    min: 0, max: 1,    type: int,   label: "Main: no hitters against your own defense", help: ""}
+  max_vs_own_dst: {default: 1, min: 0, max: 3, type: int, label: "Main: most RB/WR/TE facing your own DST", help: "Workbook M6."}
+  max_per_team:   {default: 4, min: 2, max: 8, type: int, label: "Main: most players from one team", help: "Workbook M8."}
+  rb_per_team:    {default: 1, min: 1, max: 3, type: int, label: "Main: most RBs from one team", help: "Workbook M8."}
+  qb_own_rb:      {default: 1, min: 0, max: 2, type: int, label: "Main: QB with his own RB (0 never, 1 receiving back only, 2 allowed)", help: "Workbook M7."}
 afternoon:
   stack_min: {default: 1,    min: 0, max: 3,    type: int,   label: "Afternoon: pass-catchers with the QB (minimum)", help: "Small slate: heavier game stacks."}
-  stack_max: {default: 3,    min: 1, max: 3,    type: int,   label: "Afternoon: pass-catchers with the QB (most tried)", help: ""}
+  stack_max: {default: 2,    min: 1, max: 2,    type: int,   label: "Afternoon: pass-catchers with the QB (most tried)", help: ""}
   bringback: {default: 1,    min: 0, max: 2,    type: int,   label: "Afternoon: bring-backs (0 off, 1 allowed, 2 required)", help: ""}
   gate_pct:  {default: 0.05, min: 0.0, max: 0.5, type: float, label: "Afternoon: ceiling gate (share dropped)", help: "Light: NBA backtest for 3-4 game slates. Small slates have concentrated ownership."}
   game_max:  {default: 6,    min: 3, max: 8,    type: int,   label: "Afternoon: most players from one game", help: ""}
-  no_vs_dst: {default: 0,    min: 0, max: 1,    type: int,   label: "Afternoon: no hitters against your own defense", help: ""}
+  max_vs_own_dst: {default: 1, min: 0, max: 3, type: int, label: "Afternoon: most RB/WR/TE facing your own DST", help: "Workbook M6."}
+  max_per_team:   {default: 5, min: 2, max: 8, type: int, label: "Afternoon: most players from one team", help: "Workbook M8 / SS1."}
+  rb_per_team:    {default: 2, min: 1, max: 3, type: int, label: "Afternoon: most RBs from one team", help: "Workbook M8 / SS2."}
+  qb_own_rb:      {default: 2, min: 0, max: 2, type: int, label: "Afternoon: QB with his own RB (0 never, 1 receiving back only, 2 allowed)", help: "Workbook M7 / SS1."}
 thanksgiving:
   stack_min: {default: 1,    min: 0, max: 3,    type: int,   label: "Thanksgiving: pass-catchers with the QB (minimum)", help: "3-game slate, three lock windows."}
-  stack_max: {default: 3,    min: 1, max: 3,    type: int,   label: "Thanksgiving: pass-catchers with the QB (most tried)", help: ""}
+  stack_max: {default: 2,    min: 1, max: 2,    type: int,   label: "Thanksgiving: pass-catchers with the QB (most tried)", help: ""}
   bringback: {default: 1,    min: 0, max: 2,    type: int,   label: "Thanksgiving: bring-backs (0 off, 1 allowed, 2 required)", help: ""}
   gate_pct:  {default: 0.0,  min: 0.0, max: 0.5, type: float, label: "Thanksgiving: ceiling gate (share dropped)", help: ""}
   game_max:  {default: 6,    min: 3, max: 8,    type: int,   label: "Thanksgiving: most players from one game", help: ""}
-  no_vs_dst: {default: 0,    min: 0, max: 1,    type: int,   label: "Thanksgiving: no hitters against your own defense", help: ""}
+  max_vs_own_dst: {default: 1, min: 0, max: 3, type: int, label: "Thanksgiving: most RB/WR/TE facing your own DST", help: "Workbook M6."}
+  max_per_team:   {default: 5, min: 2, max: 8, type: int, label: "Thanksgiving: most players from one team", help: "Workbook M8 / SS1."}
+  rb_per_team:    {default: 2, min: 1, max: 3, type: int, label: "Thanksgiving: most RBs from one team", help: "Workbook M8 / SS2."}
+  qb_own_rb:      {default: 2, min: 0, max: 2, type: int, label: "Thanksgiving: QB with his own RB (0 never, 1 receiving back only, 2 allowed)", help: "Workbook M7 / SS1."}
+
+# ---- Kenny's lineup-rules workbook (research/rules/NFL_DFS_Lineup_Rules_2026-11-08.xlsx) ----------
+# Hard rules graded Strong are constants in nflmain/lineups.py, not settings: QB + 1-2 pass-catchers
+# (M1, M2), no DST facing our QB (M5), $49,500 salary floor (M10), at most one 40%+ owned player (M14).
+# Everything else is here with the workbook's value as default. Backtest: research/backtest/RULES.md.
+rules:
+  no_qb_team_max:     {default: 2,    min: 1,   max: 8,   type: int,   label: "Most skill players from a team whose QB you don't use", help: "Workbook M8."}
+  rb_min_tgt:         {default: 0.12, min: 0.0, max: 0.4, type: float, label: "Receiving back: target share at least", help: "Workbook M7: a QB's own RB is allowed only if he's a receiver."}
+  double_stack_share: {default: 0.5,  min: 0.0, max: 1.0, type: float, label: "Share of lineups with QB + exactly 2 pass-catchers", help: "Workbook M1 (45-55%). Portfolio target; -1 band = off."}
+  bringback_share:    {default: 0.5,  min: 0.0, max: 1.0, type: float, label: "Share of lineups with exactly 1 bring-back", help: "Workbook M4 (45-55%)."}
+  share_band:         {default: 0.10, min: 0.0, max: 1.0, type: float, label: "Allowed miss on the two shares above", help: "0.10 = target +- 10 points; 1.0 = off."}
+  flex_te_max:        {default: 0.10, min: 0.0, max: 1.0, type: float, label: "Most lineups with a TE in FLEX", help: "Workbook M11 (10% or less)."}
+  qb_max_exposure:    {default: 0.25, min: 0.05, max: 1.0, type: float, label: "Max exposure per QB", help: "Workbook M15 (~25%). Never below the 0-or-5+ minimum."}
+  dst_max_exposure:   {default: 0.15, min: 0.05, max: 1.0, type: float, label: "Max exposure per DST", help: "Workbook M15 (~15%). Never below the 0-or-5+ minimum."}
+  min_unique:         {default: 2,    min: 1,   max: 5,   type: int,   label: "Players that must differ between any two lineups", help: "Workbook M16."}
+  own_sum_min:        {default: 75,   min: 0,   max: 200, type: float, label: "Lineup total ownership: lowest", help: "Workbook M13 soft band 75-150%."}
+  own_sum_max:        {default: 150,  min: 50,  max: 400, type: float, label: "Lineup total ownership: highest", help: "Workbook M13."}
