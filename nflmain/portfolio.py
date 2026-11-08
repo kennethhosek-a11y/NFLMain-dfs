@@ -26,8 +26,10 @@ class Extra:
     pos: position of every player (by pool index); props: {name: bool per candidate}."""
 
     def __init__(self, pos=None, props=None, bands=None, pos_caps=None, min_unique=None, sal=None,
-                 cheap=None):
+                 cheap=None, own=None, bust=None):
         self.pos = pos
+        self.own = own                         # projected field ownership % by pool index (leverage cap)
+        self.bust = bust                       # P(under 2x salary) by pool index (cheap-player cap)
         self.sal = sal                         # salaries by pool index (for the cheap-player cap)
         self.cheap = cheap                     # (salary at or under, max share) or None
         self.exceptions: dict = {}             # pool index -> max share (research-argued mispricing)
@@ -37,7 +39,7 @@ class Extra:
         self.min_unique = int(S("rules.min_unique")) if min_unique is None else min_unique
 
     @classmethod
-    def from_settings(cls, pos, props, sal=None):
+    def from_settings(cls, pos, props, sal=None, own=None, bust=None):
         b = float(S("rules.share_band"))
         bands = {}
         for name, key in (("double", "rules.double_stack_share"), ("bringback", "rules.bringback_share")):
@@ -49,7 +51,7 @@ class Extra:
         bands["cheap2"] = (0.0, float(S("rules.two_cheap_max")))
         caps_ = {"QB": float(S("rules.qb_max_exposure")), "DST": float(S("rules.dst_max_exposure"))}
         cheap = (float(S("rules.cheap_salary")), float(S("rules.cheap_max_exposure")))
-        return cls(pos, props, bands, caps_, sal=sal, cheap=cheap)
+        return cls(pos, props, bands, caps_, sal=sal, cheap=cheap, own=own, bust=bust)
 
     def player_caps(self, n: int, k_min: int, P: int) -> np.ndarray:
         """Most lineups (of n) each player may be in: the 50% cap, tighter for QB / DST, never below
@@ -60,21 +62,37 @@ class Extra:
             for p_, frac in self.pos_caps.items():
                 m = np.flatnonzero(self.pos[:P] == p_)
                 cap[m] = np.minimum(cap[m], max(floor_, int(np.floor(frac * n + 1e-9))))
+        if self.own is not None and float(S("portfolio.leverage_mult")) > 0:
+            # Kenny 11/08 leverage cap: how far above the field we go, not one flat cap for everyone
+            frac = float(S("portfolio.leverage_mult")) * np.asarray(self.own[:P], float) / 100 + float(S("portfolio.leverage_add"))
+            cap = np.minimum(cap, np.maximum(floor_, np.floor(frac * n + 1e-9).astype(int)))
         if self.sal is not None and self.cheap is not None:   # Kenny 11/08: cheap players are boom-or-bust
             m = np.flatnonzero(np.asarray(self.sal[:P]) <= self.cheap[0])
-            cap[m] = np.minimum(cap[m], max(floor_, int(np.floor(self.cheap[1] * n + 1e-9))))
+            frac = np.full(len(m), self.cheap[1])
+            if self.bust is not None:          # the more often he busts, the lower his cap
+                ok, bad, lo = (float(S("rules.cheap_bust_ok")), float(S("rules.cheap_bust_bad")),
+                               float(S("rules.cheap_min_exposure")))
+                b = np.asarray(self.bust[:P], float)[m]
+                t = np.clip((b - ok) / max(bad - ok, 1e-9), 0.0, 1.0)
+                frac = np.minimum(frac, self.cheap[1] - t * (self.cheap[1] - min(lo, self.cheap[1])))
+            cap[m] = np.minimum(cap[m], np.maximum(floor_, np.floor(frac * n + 1e-9).astype(int)))
         for i, frac in self.exceptions.items():          # argued exceptions: never above the overall cap
             if i < P and self.pos is not None and self.pos[i] not in self.pos_caps:
-                cap[i] = min(caps(n), max(floor_, int(np.floor(frac * n + 1e-9))))
+                cap[i] = min(caps(n), max(floor_, int(np.floor(frac * n + 1e-9))))   # beats leverage/bust caps
         return cap
 
     def band_counts(self, n: int) -> dict:
         return {k: (int(np.ceil(lo * n - 1e-9)), int(np.floor(hi * n + 1e-9))) for k, (lo, hi) in self.bands.items()
                 if k in self.props}
 
+    def without_leverage(self):
+        e = Extra(self.pos, self.props, self.bands, self.pos_caps, self.min_unique, self.sal, self.cheap, None, self.bust)
+        e.exceptions = self.exceptions
+        return e
+
     def without_bands(self, keep=()):
         e = Extra(self.pos, self.props, {k: v for k, v in self.bands.items() if k in keep},
-                  self.pos_caps, self.min_unique, self.sal, self.cheap)
+                  self.pos_caps, self.min_unique, self.sal, self.cheap, self.own, self.bust)
         e.exceptions = self.exceptions
         return e
 
@@ -103,8 +121,14 @@ def caps(n: int) -> int:
 
 
 def min_count(n: int, initial: bool = True) -> int:
+    """0-or-k rule by contest size (Kenny 11/08): off under min_count_off_below entries (30),
+    min_count_mid (3) up to min_count_full_entries (100), then min_count (5)."""
     k = int(S("portfolio.min_count"))
-    return k if (initial and k > 1 and n >= MIN_COUNT_ENTRIES) else 1
+    if not initial or k <= 1 or n < max(MIN_COUNT_ENTRIES, int(S("portfolio.min_count_off_below"))):
+        return 1
+    if n < int(S("portfolio.min_count_full_entries")):
+        return max(1, min(k, int(S("portfolio.min_count_mid"))))
+    return k
 
 
 def meets_min_count(idx, lus, n, initial=True) -> bool:
@@ -296,7 +320,9 @@ def select(metrics, lus, n, large, exclude=(), initial=True, stack=None, quiet=F
     """Whole-portfolio MILP first (0-or-5+ on the initial build, 50% cap, stack-team cap); if the
     0-or-5+ rule can't be met from these candidates it steps down (5 -> 3 -> off) and says so.
     Greedy picker as the last resort."""
+    import time as _time
     k0 = min_count(n, initial)
+    t_start, budget = _time.time(), float(S("portfolio.select_budget"))
     if n >= 2:
         for k in sorted({k0, min(k0, 3), 1}, reverse=True):
             # if every shape share can't be met: drop the double-stack / run-back targets first and keep
@@ -304,14 +330,29 @@ def select(metrics, lus, n, large, exclude=(), initial=True, stack=None, quiet=F
             ex_list = [extra] if extra is None else [extra, extra.without_bands(("rb_flex", "te_flex", "cheap2", "risk0", "risk5", "risk12")),
                                                      extra.without_bands(("rb_flex", "te_flex", "cheap2")),
                                                      extra.without_bands()]
+            if extra is not None and (extra.own is not None or extra.bust is not None):
+                # last resorts, never leave entries empty: drop the leverage cap, then the bust-scaled
+                # cheap cap (the 50%, QB / DST and flat cheap caps always stay)
+                nl = extra.without_leverage().without_bands(("rb_flex", "te_flex", "cheap2"))
+                nb = extra.without_leverage().without_bands(("rb_flex", "te_flex", "cheap2"))
+                nb.bust = None
+                ex_list += [nl, nb]
             for ex in ex_list:
                 for st in ((stack, None) if stack is not None else (None,)):
-                    ch = joint(metrics, lus, n, large, exclude, k, st, time_limit=time_limit, extra=ex)
+                    left = budget - (_time.time() - t_start)
+                    if left < 1:
+                        break
+                    ch = joint(metrics, lus, n, large, exclude, k, st, time_limit=min(time_limit, left), extra=ex)
                     if ch:
                         if k < k0 and not quiet:
                             print(f"[portfolio] the 0-or-{k0}+ rule couldn't be met from these candidates; used 0-or-{k}+")
                         if extra is not None and ex is not extra and not quiet:
-                            print("[portfolio] the workbook's lineup-shape shares couldn't all be met; picked without them")
+                            if ex.own is None and extra.own is not None:
+                                print("[portfolio] the leverage caps (2x ownership + 10)"
+                                      + (" and bust-scaled cheap caps" if ex.bust is None and extra.bust is not None else "")
+                                      + " couldn't fill every entry; picked without them")
+                            else:
+                                print("[portfolio] the workbook's lineup-shape shares couldn't all be met; picked without them")
                         return ch
     ch = greedy(metrics, lus, n, large, exclude, stack, extra)
     if not meets_min_count(ch, lus, n, initial):

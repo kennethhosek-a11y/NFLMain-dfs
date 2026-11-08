@@ -54,7 +54,7 @@ python -m pytest -q tests                        # offline tests
   top-heavy table.
 - The portfolio is picked as a whole (MILP): top-1% coverage for large fields, cash for small.
   - 50% cap per player and per QB stack team.
-  - 0-or-5+ on the initial build: candidates are rebuilt from the first portfolio's players so
+  - 0-or-5+ on the initial build (100+ entries; 0-or-3 for 30-99; none under 30): candidates are rebuilt from the first portfolio's players so
     the rule can be met.
   - Swaps must be confirmed on an independent set of sims.
 

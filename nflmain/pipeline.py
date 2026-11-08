@@ -566,7 +566,7 @@ def build(p: Projections, contests: list[Contest], n_sims: int | None = None, n_
     exc = overrides.exposure_exceptions(pool, overrides.load(p.day, p.slate_type, quiet=True))
 
     def make_ext(lus_):
-        e = Extra.from_settings(pos_all, L.shapes(lus_, P, float(S("rules.cheap_salary"))), P.sal)
+        e = Extra.from_settings(pos_all, L.shapes(lus_, P, float(S("rules.cheap_salary"))), P.sal, own=own, bust=bust)
         e.exceptions = exc
         if inside_out:
             worst = rel_risk[lus_].max(axis=1)
@@ -586,13 +586,43 @@ def build(p: Projections, contests: list[Contest], n_sims: int | None = None, n_
     ext = make_ext(lus)
     picks, plan, rows = {}, [], []
     used: set[int] = set()
-    for c in contests:
+    # biggest contest first (Kenny 11/08): it gets first pick of lineups, smaller ones avoid its picks
+    for c in sorted(contests, key=lambda c: -(len(c.entry_ids) or 1)):
         n = len(c.entry_ids) or 1
         tier_bands(ext, n)
         mA = evaluate(scA, fld, fpA, c, dupe)
         k0 = min_count(n, True)
         t1 = datetime.now()
         chosen = select(mA, lus, n, c.large, exclude=used, initial=False, stack=stk, quiet=True, extra=ext)
+        if len(chosen) < n:
+            # not enough lineups fit the caps (cheap / leverage / QB / DST): build more lineups that
+            # respect them, one at a time, banning players already at their cap, then pick again
+            capv = ext.player_caps(n, 1, len(pool))
+            opt_f = L.Optimizer(P, rules, ((proj_all > 0.3) & allow).astype(float))
+            more = []
+            for _ in range(3):
+                cnt = np.bincount(lus[chosen].ravel(), minlength=len(pool)) if chosen else np.zeros(len(pool), int)
+                for _k in range(n):
+                    s_ = rng.integers(fpA.shape[1])
+                    pts = 0.5 * fpA[:, s_] + 0.5 * proj_all * rng.lognormal(0, 0.15, len(proj_all))
+                    lu = opt_f.solve(pts, banned=list(np.flatnonzero(cnt >= capv)), time_limit=5)
+                    if lu is None:
+                        break
+                    more.append(lu)
+                    cnt[lu] += 1
+            if more:
+                new = np.unique(L.canon(np.array(more)), axis=0)
+                have = {L.key(x) for x in lus}
+                new = np.array([x for x in new if L.key(x) not in have and L.salary(x[None], P.sal)[0] >= msal]).reshape(-1, L.ROSTER)
+                if len(new):
+                    lus = np.vstack([lus, new])
+                    dupe, scA, scB = score_all(lus)
+                    stk = stack_team(lus, pool)
+                    ext = make_ext(lus)
+                    tier_bands(ext, n)
+                    mA = evaluate(scA, fld, fpA, c, dupe)
+                    chosen = select(mA, lus, n, c.large, exclude=used, initial=False, stack=stk, quiet=True, extra=ext)
+            print(f"[build] cap-aware top-up for {c.name[:40]}: +{len(more)} builds, {len(chosen)}/{n} filled")
         if k0 > 1 and len(chosen) == n:
             # 0-or-5+ rule: rebuild candidates from only the players this first portfolio uses, so
             # lineups share players, then pick the whole set again with the rule on

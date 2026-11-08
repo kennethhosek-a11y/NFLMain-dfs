@@ -187,7 +187,7 @@ def cmd_news(a):
     for dg, cids in groups.items():
         gi = _group_info(dg, day)
         p = pipeline.run(day=day, draft_group=dg, data=data, quiet=True, save=True)
-        _diff(p, day)
+        moved = _diff(p, day)
         sub = entries[entries["Contest ID"].isin(cids)]
         cons = {c.id: c for c in C.load_contests(sub)}
         # pool: everyone playable plus anyone already in an entry (locked or not)
@@ -211,8 +211,9 @@ def cmd_news(a):
         currents = _indices(sub, pool)
         rules = L.Rules.for_slate(p.slate_type)
         exc = overrides.exposure_exceptions(pool, overrides.load(day, p.slate_type, quiet=True), quiet=True)
+        news = pool["ID"].astype(str).isin(moved).to_numpy() if moved is not None else None
         res = lateswap.reevaluate(pool, fpA, fpB, currents, sub["Contest ID"].tolist(), cons, fld, allow, rules,
-                                  dead, now, seed=a.seed, exc=exc)
+                                  dead, now, seed=a.seed, exc=exc, news=news)
         windows = slate.windows(pool)
         nxt = [w for w in windows if datetime.fromisoformat(w) > now]
         print(f"\n[{p.label}] {int(res['locked'].sum())} players locked; next lock "
@@ -252,23 +253,26 @@ def _quick_overrides(day, a):
 
 
 def _diff(p, day):
+    """Print material changes since the build; return their DK IDs (None = no baseline saved)."""
     f = STATE / f"baseline_{day}_{p.label}.csv"
     if not f.exists():
-        return
+        return None
     b = pd.read_csv(f, dtype={"ID": str}).set_index("ID")
     d = p.df.assign(ID=p.df["ID"].astype(str)).set_index("ID")
     common = d.index.intersection(b.index)
     mv_pts, mv_pct = float(settings.get("news.move_pts")), float(settings.get("news.move_pct"))
-    lines = []
+    lines, ids = [], set()
     for i in common:
         old, new = float(b.at[i, "Projection"]), float(d.at[i, "Projection"])
         so, sn = str(b.at[i, "status"]) if pd.notna(b.at[i, "status"]) else "", str(d.at[i, "status"])
         if so != sn or (abs(new - old) >= mv_pts and abs(new - old) >= mv_pct * max(old, 1)):
+            ids.add(str(i))
             lines.append(f"{d.at[i, 'Name']} ({d.at[i, 'team']} {d.at[i, 'pos']}): {so or 'active'} -> {sn or 'active'}, "
                          f"proj {old:.1f} -> {new:.1f}")
     print(f"[news] {p.label}: {len(lines)} material change(s) since the build" + (":" if lines else ""))
     for x in lines[:40]:
         print("   " + x)
+    return ids
 
 
 def _standings(pool, fp, lineups, sub, cons, fld, lv):

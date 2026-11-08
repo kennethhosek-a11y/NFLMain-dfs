@@ -297,9 +297,13 @@ def _legal(lu, P, ctx) -> bool:
 
 def reevaluate(pool: pd.DataFrame, fpA: np.ndarray, fpB: np.ndarray, currents: list, contests_of: list,
                contests: dict, fld: np.ndarray, allow: np.ndarray, rules, dead: np.ndarray,
-               now: datetime | None = None, seed: int = 7, exc: dict | None = None) -> dict:
+               now: datetime | None = None, seed: int = 7, exc: dict | None = None,
+               news: np.ndarray | None = None) -> dict:
     """currents: per entry, 9 pool indices in slot order (None = empty); contests_of: contest id per
-    entry. Returns {"lineups": per entry, "changed": [...], "locked": mask, "log": [...]}."""
+    entry. news: pool mask of players with material news since the build (status change or
+    projection move); before the first lock only entries holding one of them (or a player who is
+    out) may change (lateswap.prelock_news_only, Kenny 11/08: no churn without news).
+    Returns {"lineups": per entry, "changed": [...], "locked": mask, "log": [...]}."""
     locked = locked_mask(pool, now)
     P = L.Pool.from_df(pool)
     proj = fpA.mean(axis=1)
@@ -312,7 +316,17 @@ def reevaluate(pool: pd.DataFrame, fpA: np.ndarray, fpB: np.ndarray, currents: l
                # keeps the check under 3 minutes for 190 entries; after a lock few spots are open
                n_opts=int(S("lateswap.options")) if locked.any() else max(10, int(S("lateswap.options")) // 2))
     t0 = datetime.now()
-    opts = build_options(currents, ctx, seed=seed)
+    frozen = [False] * len(currents)
+    if not locked.any() and int(S("lateswap.prelock_news_only")) and news is not None:
+        touch = np.asarray(news, bool) | np.asarray(dead, bool)
+        frozen = [c is not None and all(x is not None for x in c) and not touch[list(c)].any() for c in currents]
+    todo = [k for k, f in enumerate(frozen) if not f]
+    sub_opts = build_options([currents[k] for k in todo], ctx, seed=seed) if todo else []
+    opts = [[list(c)] if f else None for c, f in zip(currents, frozen)]
+    for k, o in zip(todo, sub_opts):
+        opts[k] = o
+    if any(frozen):
+        print(f"[lateswap] before the first lock: {sum(frozen)} entries have no player with news - kept as they are")
     print(f"[lateswap] options for {len(opts)} entries in {(datetime.now() - t0).seconds}s "
           f"({int(locked.sum())} players locked)")
     own = pool["Ownership"].to_numpy(float)
