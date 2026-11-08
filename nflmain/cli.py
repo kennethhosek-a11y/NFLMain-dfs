@@ -210,8 +210,9 @@ def cmd_news(a):
         allow = ~pool["Gate"].to_numpy(bool)
         currents = _indices(sub, pool)
         rules = L.Rules.for_slate(p.slate_type)
+        exc = overrides.exposure_exceptions(pool, overrides.load(day, p.slate_type, quiet=True), quiet=True)
         res = lateswap.reevaluate(pool, fpA, fpB, currents, sub["Contest ID"].tolist(), cons, fld, allow, rules,
-                                  dead, now, seed=a.seed)
+                                  dead, now, seed=a.seed, exc=exc)
         windows = slate.windows(pool)
         nxt = [w for w in windows if datetime.fromisoformat(w) > now]
         print(f"\n[{p.label}] {int(res['locked'].sum())} players locked; next lock "

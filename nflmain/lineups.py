@@ -83,6 +83,9 @@ class Rules:
     no_qb_team_max: int = 2     # M8: skill players from a team whose QB we don't use
     qb_own_rb: int = 1          # M7: 0 never, 1 only receiving backs, 2 allowed (SS1)
     rb_min_tgt: float = 0.12    # M7: "receiving back" = target share at least this
+    max_rb_runback: int = 8     # M4: RBs from our QB's opponent (run-backs should be WR/TE)
+    max_cheap: int = 9          # Kenny 11/08: QB/RB/WR at or under cheap_salary per lineup
+    cheap_salary: float = 4500
     hard: bool = True           # False only in research (e.g. the real best lineup, no rules at all)
 
     def __post_init__(self):            # hard rules can't be loosened by settings
@@ -100,7 +103,8 @@ class Rules:
                    int(for_type(slate_type, "game_max")), int(for_type(slate_type, "max_vs_own_dst")),
                    int(get("build.min_salary")), int(for_type(slate_type, "rb_per_team")),
                    int(get("rules.no_qb_team_max")), int(for_type(slate_type, "qb_own_rb")),
-                   float(get("rules.rb_min_tgt")))
+                   float(get("rules.rb_min_tgt")), int(get("rules.max_rb_runback")),
+                   int(get("rules.max_cheap_per_lineup")), float(get("rules.cheap_salary")))
 
 
 def violations(lu, P: Pool, rules: Rules | None = None) -> list[str]:
@@ -143,6 +147,10 @@ def violations(lu, P: Pool, rules: Rules | None = None) -> list[str]:
         if sum(1 for i in lu if P.team[i] == t and P.pos[i] in ("RB", "WR", "TE")) > rules.no_qb_team_max:
             out.append("skill players without their QB")
             break
+    if sum(1 for i in lu if P.pos[i] in ("QB", "RB", "WR") and P.sal[i] <= rules.cheap_salary) > rules.max_cheap:
+        out.append("too many cheap QB/RB/WR")
+    if sum(1 for i in rbs if P.team[i] == P.opp[q]) > rules.max_rb_runback:
+        out.append("RB run-back")
     own_rb = [i for i in rbs if P.team[i] == P.team[q]]
     if own_rb and (rules.qb_own_rb == 0 or (rules.qb_own_rb == 1 and (
             P.tgt is None or any(P.tgt[i] < rules.rb_min_tgt for i in own_rb)))):
@@ -152,17 +160,21 @@ def violations(lu, P: Pool, rules: Rules | None = None) -> list[str]:
     return out
 
 
-def shapes(lus: np.ndarray, P: Pool) -> dict:
-    """Per lineup: QB + exactly 2 pass-catchers (double), exactly 1 bring-back (opposing RB/WR/TE),
-    TE in FLEX (two TEs) - the workbook's portfolio shares (M1, M4, M11)."""
-    out = {"double": [], "bringback": [], "te_flex": []}
+def shapes(lus: np.ndarray, P: Pool, cheap_salary: float | None = None) -> dict:
+    """Per lineup: QB + exactly 2 pass-catchers (double), exactly 1 run-back (an opposing WR/TE -
+    workbook M4 counts receivers, not RBs), TE in FLEX (two TEs), RB in FLEX (three RBs) - the
+    workbook's portfolio shares (M1, M4, M11)."""
+    out = {"double": [], "bringback": [], "te_flex": [], "rb_flex": [], "cheap2": []}
     for lu in np.atleast_2d(lus):
         q = lu[P.pos[lu] == "QB"][0]
         mates = sum(1 for i in lu if P.team[i] == P.team[q] and P.pos[i] in ("WR", "TE"))
-        bb = sum(1 for i in lu if P.team[i] == P.opp[q] and P.pos[i] in ("RB", "WR", "TE"))
+        bb = sum(1 for i in lu if P.team[i] == P.opp[q] and P.pos[i] in ("WR", "TE"))
         out["double"].append(mates == 2)
         out["bringback"].append(bb == 1)
         out["te_flex"].append(int((P.pos[lu] == "TE").sum()) == 2)
+        out["rb_flex"].append(int((P.pos[lu] == "RB").sum()) == 3)
+        cs = 4500.0 if cheap_salary is None else cheap_salary      # Kenny 11/08: lineups with 2 cheap QB/RB/WR
+        out["cheap2"].append(sum(1 for i in lu if P.pos[i] in ("QB", "RB", "WR") and P.sal[i] <= cs) == 2)
     return {k: np.array(v, bool) for k, v in out.items()}
 
 
@@ -222,6 +234,9 @@ class Optimizer:
             add(np.r_[m, e2], 0, np.inf)          # y_g <= players in g
             add(np.r_[m, z], 0, rules.game_max)
         add(np.r_[np.zeros(n), np.ones(G)], 2, np.inf)   # 2+ games
+        if rules.max_cheap < ROSTER:                    # Kenny 11/08: at most N cheap QB/RB/WR per lineup
+            ch = (np.isin(P.pos, ["QB", "RB", "WR"]) & (P.sal <= rules.cheap_salary)).astype(float)
+            add(np.r_[ch, z], 0, rules.max_cheap)
         pc = np.isin(P.pos, ["WR", "TE"])
         skill = np.isin(P.pos, ["RB", "WR", "TE"])
         M = 8
@@ -238,6 +253,10 @@ class Optimizer:
                 if rules.bringback >= 2:
                     opp = ((P.opp == t) & skill).astype(float)
                     add(np.r_[opp - qb, z], 0, np.inf)
+                # M4: opposing RBs as run-backs are limited (receivers are the run-back)
+                if rules.max_rb_runback < 3:
+                    opp_rb = ((P.opp == t) & (P.pos == "RB")).astype(float)
+                    add(np.r_[opp_rb + M * qb, z], -np.inf, rules.max_rb_runback + M)
                 # M8: skill players from a team whose QB isn't used: <= no_qb_team_max
                 add(np.r_[(on_t & skill).astype(float) - M * qb, z], -np.inf, rules.no_qb_team_max)
                 # M7: QB with his own RB only if the back is a receiver (mode 1) / never (mode 0)
@@ -264,7 +283,7 @@ class Optimizer:
         self.games = games
         self._pc, self._skill = pc, skill
 
-    def solve(self, pts: np.ndarray, banned=(), forced=(), qb_mates: int | None = None,
+    def solve(self, pts: np.ndarray, banned=(), forced=(), qb_mates: int | None = None, rb_max: int | None = None,
               bringback: int | None = None, team: str | None = None, extra=(), time_limit: float = 10.0):
         """Best lineup for these points. qb_mates = exact pass-catchers with the QB (else the rules'
         range); bringback = exact opposing skill players (None = any); team = force this QB's team."""
@@ -293,9 +312,11 @@ class Optimizer:
                 rows.append(np.r_[mates - qb_mates * qb, z]); lo.append(0); hi.append(np.inf)
                 rows.append(np.r_[mates + M * qb, z]); lo.append(-np.inf); hi.append(qb_mates + M)
             if bringback is not None:
-                opp = ((P.opp == t) & self._skill).astype(float)
+                opp = ((P.opp == t) & self._pc).astype(float)        # run-back = opposing WR/TE
                 rows.append(np.r_[opp - bringback * qb, z]); lo.append(0); hi.append(np.inf)
                 rows.append(np.r_[opp + M * qb, z]); lo.append(-np.inf); hi.append(bringback + M)
+        if rb_max is not None:                                     # e.g. 2 = no RB in FLEX
+            rows.append(np.r_[(P.pos == "RB").astype(float), z]); lo.append(0); hi.append(rb_max)
         if rows:
             cons.append(LinearConstraint(np.array(rows), lo, hi))
         c = -np.r_[np.asarray(pts, float), np.zeros(G)]

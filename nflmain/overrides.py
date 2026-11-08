@@ -24,7 +24,7 @@ import pandas as pd
 from .names import norm
 
 DIR = Path(__file__).resolve().parent.parent / "data" / "overrides"
-COLS = ["Name", "ProjectionAdj", "Status", "Ownership", "Note", "Slate"]
+COLS = ["Name", "ProjectionAdj", "Status", "Ownership", "Note", "Slate", "MaxExposure"]
 STATUS = {"OUT": "OUT", "O": "OUT", "Q": "Q", "D": "D", "DOUBTFUL": "D", "GTD": "Q", "ACTIVE": "",
           "IN": "", "START": "START", "": None}
 
@@ -45,8 +45,9 @@ def load(day: str, slate_type: str | None = None, directory: Path | None = None,
     for c in COLS:
         if c not in ov:
             ov[c] = ""
-    for c in ("ProjectionAdj", "Ownership"):
+    for c in ("ProjectionAdj", "Ownership", "MaxExposure"):
         ov[c] = pd.to_numeric(ov[c].str.strip(), errors="coerce")
+    ov.loc[ov["MaxExposure"] > 1, "MaxExposure"] /= 100          # 45 or 0.45 both mean 45%
     ov["Status"] = ov["Status"].str.strip().str.upper()
     ov["Note"] = ov["Note"].str.strip()
     ov["Slate"] = ov["Slate"].str.strip().str.lower()
@@ -140,3 +141,27 @@ def apply_ownership(proj: pd.DataFrame, own: np.ndarray, ov: pd.DataFrame | None
         print(f"[research] {r['Name']}: ownership {own[i]:.1f}% -> {float(r['Ownership']):.1f}%")
         own[i] = float(np.clip(r["Ownership"], 0, 100))
     return own
+
+
+def exposure_exceptions(pool: pd.DataFrame, ov: pd.DataFrame | None, quiet: bool = False) -> dict:
+    """Kenny's rule (11/08/2026): players at or under rules.cheap_salary are capped at
+    rules.cheap_max_exposure UNLESS research argues a serious mispricing. An exception is a row in
+    the overrides file with MaxExposure (e.g. 0.45) AND a Note making the case; without a Note it is
+    ignored. Returns {pool row index: max share}."""
+    out = {}
+    if ov is None or "MaxExposure" not in ov:
+        return out
+    keys = _keys(pool).to_numpy()
+    for k, r in ov.iterrows():
+        if pd.isna(r["MaxExposure"]):
+            continue
+        rows = np.flatnonzero(keys == k)
+        if not len(rows):
+            continue
+        if not str(r["Note"]).strip():
+            print(f"[research] {r['Name']}: MaxExposure ignored - an exception needs a Note arguing the mispricing")
+            continue
+        out[int(rows[0])] = float(np.clip(r["MaxExposure"], 0.0, 1.0))
+        if not quiet:
+            print(f"[research] exposure exception: {r['Name']} up to {r['MaxExposure']:.0%} - {r['Note']}")
+    return out
