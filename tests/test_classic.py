@@ -113,7 +113,8 @@ def test_build_portfolio_rules(proj):
     SET.override("rules.qb_max_exposure", 1.0)
     SET.override("rules.dst_max_exposure", 1.0)
     SET.override("rules.share_band", 1.0)
-    for k, v in (("main.rb_per_team", 2), ("main.qb_own_rb", 2), ("rules.no_qb_team_max", 8), ("main.max_per_team", 5)):
+    for k, v in (("main.rb_per_team", 2), ("main.qb_own_rb", 2), ("rules.no_qb_team_max", 8), ("main.max_per_team", 5),
+                 ("rules.max_rb_runback", 3), ("rules.flex_rb_max", 1.0)):
         SET.override(k, v)
     c = C.Contest("1", "test", 1.0, 5000, entry_ids=[str(i) for i in range(12)], prize_pool=4000)
     res = pipeline.build(proj, [c])
@@ -125,7 +126,8 @@ def test_build_portfolio_rules(proj):
     cnt = np.bincount(lus.ravel())
     assert cnt.max() <= portfolio.caps(12)                  # 50% cap
     for k in ("rules.qb_max_exposure", "rules.dst_max_exposure", "rules.share_band", "main.rb_per_team",
-              "main.qb_own_rb", "rules.no_qb_team_max", "main.max_per_team"):
+              "main.qb_own_rb", "rules.no_qb_team_max", "main.max_per_team", "rules.max_rb_runback",
+              "rules.flex_rb_max"):
         SET._overrides.pop(k, None)
     assert len({L.key(x) for x in lus}) == 12               # no lineup twice
     used = cnt[cnt > 0]
@@ -195,3 +197,17 @@ def test_workbook_portfolio_rules():
     cnt = np.bincount(lus[ch].ravel(), minlength=56)
     assert cnt[:8].max() <= 10 and cnt[8:16].max() <= 6          # QB 25%, DST 15% of 40
     assert 16 <= props["double"][ch].sum() <= 24 and props["te_flex"][ch].sum() <= 4
+
+
+def test_run_back_and_flex_rules():
+    """Run-backs count opposing WR/TE only; an RB in FLEX is tagged; opposing RBs can be ruled out."""
+    pos = np.array(["QB", "WR", "WR", "RB", "RB", "RB", "TE", "WR", "DST"], dtype=object)
+    team = np.array(["A", "A", "B", "B", "C", "C", "C", "D", "D"], dtype=object)
+    opp = np.array(["B", "B", "A", "A", "E", "E", "E", "F", "F"], dtype=object)
+    P = L.Pool(np.full(9, 5500.0), pos, team, opp, np.array(["A@B"] * 3 + ["X"] * 6, dtype=object),
+               np.array([""] * 9, dtype=object))
+    lu = np.arange(9)
+    sh = L.shapes(lu[None, :], P)
+    assert sh["bringback"][0] and sh["rb_flex"][0]      # WR from B is the run-back; 3 RBs = RB in FLEX
+    assert "RB run-back" in L.violations(lu, P, L.Rules(max_rb_runback=0, max_per_team=8, rb_per_team=3,
+                                                        no_qb_team_max=8, qb_own_rb=2, min_salary=0, hard=False))

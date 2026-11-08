@@ -345,7 +345,7 @@ def candidates(p: Projections, pool: pd.DataFrame, fp: np.ndarray, rules: L.Rule
     elig = (proj > 0.3) & allow
     jobs = []
     for s in rng.choice(fp.shape[1], size=min(n_worlds, fp.shape[1]), replace=False):
-        jobs.append((fp[:, s], {}))
+        jobs.append((fp[:, s], {} if s % 2 else {"rb_max": 2}))   # half without an RB in FLEX (M11)
     # structured stacks: each reasonable QB with 1..stack_max pass-catchers, with / without a bring-back
     qbs = np.flatnonzero((pool["pos"] == "QB").to_numpy() & elig)
     qbs = qbs[np.argsort(-ceil[qbs])][:16]
@@ -356,6 +356,7 @@ def candidates(p: Projections, pool: pd.DataFrame, fp: np.ndarray, rules: L.Rule
             for b in bbs:
                 for pts in (proj, ceil, 0.5 * (proj + ceil), proj * rng.lognormal(0, 0.25, len(proj))):
                     jobs.append((pts, {"team": t, "qb_mates": k, "bringback": b}))
+                    jobs.append((pts, {"team": t, "qb_mates": k, "bringback": b, "rb_max": 2}))
     for _ in range(n_worlds // 4):
         jobs.append((proj * rng.lognormal(0, 0.3, len(proj)), {}))
     out = solve_many(P, rules, elig.astype(float), jobs)
@@ -533,7 +534,8 @@ def build(p: Projections, contests: list[Contest], n_sims: int | None = None, n_
                 eu = np.zeros(len(pool))
                 eu[U] = 1.0
                 eu *= ((proj_all > 0.3) & allow)
-                jobs = [(fpA[:, s], {}) for s in rng.choice(fpA.shape[1], size=min(600, 25 * n), replace=False)]
+                jobs = [(fpA[:, s], {} if j % 2 else {"rb_max": 2})
+                        for j, s in enumerate(rng.choice(fpA.shape[1], size=min(600, 25 * n), replace=False))]
                 jobs += [(proj_all * rng.lognormal(0, 0.2, len(proj_all)), {}) for _ in range(min(150, 5 * n))]
                 new = solve_many(P, rules, eu, jobs)
                 if new:
@@ -560,6 +562,9 @@ def build(p: Projections, contests: list[Contest], n_sims: int | None = None, n_
                     print(f"[build] 0-or-{k0}+ couldn't be fully met; nearest portfolio used")
             print(f"[build] 0-or-{k0}+ pass: {int(inside.sum())} lineups from the portfolio's {len(U)} players "
                   f"({(datetime.now() - t1).seconds}s)")
+        if k0 > 1 and len(chosen) == n and not meets_min_count(chosen, lus, n, True):
+            floor_note = (floor_note + "; " if floor_note else "") + f"0-or-{k0}+ rule not fully met"
+            print(f"[build] NOTE: the 0-or-{k0}+ rule couldn't be fully met in {c.name[:40]}")
         mB = evaluate(scB, fld, fpB, c, dupe)
         chosen, log = confirm_swaps(chosen, mA, mB, lus, c.large, exclude=used, initial=True, stack=stk, extra=ext)
         used.update(chosen)

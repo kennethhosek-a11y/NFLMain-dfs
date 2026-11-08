@@ -41,6 +41,7 @@ class Extra:
             if b < 1.0:
                 bands[name] = (max(t - b, 0.0), min(t + b, 1.0))
         bands["te_flex"] = (0.0, float(S("rules.flex_te_max")))
+        bands["rb_flex"] = (0.0, float(S("rules.flex_rb_max")))
         caps_ = {"QB": float(S("rules.qb_max_exposure")), "DST": float(S("rules.dst_max_exposure"))}
         return cls(pos, props, bands, caps_)
 
@@ -59,8 +60,9 @@ class Extra:
         return {k: (int(np.ceil(lo * n - 1e-9)), int(np.floor(hi * n + 1e-9))) for k, (lo, hi) in self.bands.items()
                 if k in self.props}
 
-    def without_bands(self):
-        return Extra(self.pos, self.props, {}, self.pos_caps, self.min_unique)
+    def without_bands(self, keep=()):
+        return Extra(self.pos, self.props, {k: v for k, v in self.bands.items() if k in keep},
+                     self.pos_caps, self.min_unique)
 
 
 NO_EXTRA = Extra(min_unique=2)
@@ -283,7 +285,10 @@ def select(metrics, lus, n, large, exclude=(), initial=True, stack=None, quiet=F
     k0 = min_count(n, initial)
     if n >= 2:
         for k in sorted({k0, min(k0, 3), 1}, reverse=True):
-            ex_list = [extra] if extra is None else [extra, extra.without_bands()]
+            # if every shape share can't be met: drop the double-stack / run-back targets first and keep
+            # the FLEX limits (RB / TE in FLEX), then drop those too
+            ex_list = [extra] if extra is None else [extra, extra.without_bands(("rb_flex", "te_flex")),
+                                                     extra.without_bands()]
             for ex in ex_list:
                 for st in ((stack, None) if stack is not None else (None,)):
                     ch = joint(metrics, lus, n, large, exclude, k, st, time_limit=time_limit, extra=ex)
