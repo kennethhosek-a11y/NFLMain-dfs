@@ -211,3 +211,19 @@ def test_run_back_and_flex_rules():
     assert sh["bringback"][0] and sh["rb_flex"][0]      # WR from B is the run-back; 3 RBs = RB in FLEX
     assert "RB run-back" in L.violations(lu, P, L.Rules(max_rb_runback=0, max_per_team=8, rb_per_team=3,
                                                         no_qb_team_max=8, qb_own_rb=2, min_salary=0, hard=False))
+
+
+def test_exposure_exception_needs_a_note(tmp_path):
+    """A cheap player can go above the 30% cap only with MaxExposure AND a Note arguing mispricing."""
+    from nflmain import overrides
+    pool = pd.DataFrame({"Name": ["Cheap Guy", "Other Guy"]})
+    f = tmp_path / "2026-11-08.csv"
+    f.write_text("Name,ProjectionAdj,Status,Ownership,Note,Slate,MaxExposure\n"
+                 "Cheap Guy,,,,Starter now; DK priced him as a backup,,45\nOther Guy,,,,,,0.45\n")
+    ov = overrides.load("2026-11-08", directory=tmp_path, quiet=True)
+    assert overrides.exposure_exceptions(pool, ov, quiet=True) == {0: 0.45}
+    pos = np.array(["WR", "WR", "QB"], dtype=object)
+    ext = portfolio.Extra(pos, {}, {}, {"QB": 0.25}, sal=np.array([4000.0, 4000.0, 6000.0]), cheap=(4500, 0.30))
+    ext.exceptions = {0: 0.45}
+    capv = ext.player_caps(20, 1, 3)
+    assert capv[0] == min(9, portfolio.caps(20)) and capv[1] == 6   # 45% (never above the overall cap); plain cheap 30%

@@ -30,6 +30,7 @@ class Extra:
         self.pos = pos
         self.sal = sal                         # salaries by pool index (for the cheap-player cap)
         self.cheap = cheap                     # (salary at or under, max share) or None
+        self.exceptions: dict = {}             # pool index -> max share (research-argued mispricing)
         self.props = props or {}
         self.bands = bands or {}               # name -> (low share, high share)
         self.pos_caps = pos_caps or {}         # position -> max share
@@ -61,6 +62,9 @@ class Extra:
         if self.sal is not None and self.cheap is not None:   # Kenny 11/08: cheap players are boom-or-bust
             m = np.flatnonzero(np.asarray(self.sal[:P]) <= self.cheap[0])
             cap[m] = np.minimum(cap[m], max(floor_, int(np.floor(self.cheap[1] * n + 1e-9))))
+        for i, frac in self.exceptions.items():          # argued exceptions: never above the overall cap
+            if i < P and self.pos is not None and self.pos[i] not in self.pos_caps:
+                cap[i] = min(caps(n), max(floor_, int(np.floor(frac * n + 1e-9))))
         return cap
 
     def band_counts(self, n: int) -> dict:
@@ -68,8 +72,10 @@ class Extra:
                 if k in self.props}
 
     def without_bands(self, keep=()):
-        return Extra(self.pos, self.props, {k: v for k, v in self.bands.items() if k in keep},
-                     self.pos_caps, self.min_unique, self.sal, self.cheap)
+        e = Extra(self.pos, self.props, {k: v for k, v in self.bands.items() if k in keep},
+                  self.pos_caps, self.min_unique, self.sal, self.cheap)
+        e.exceptions = self.exceptions
+        return e
 
 
 NO_EXTRA = Extra(min_unique=2)

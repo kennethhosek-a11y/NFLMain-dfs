@@ -226,7 +226,7 @@ def _marginal(top1: np.ndarray, eo: list, has_cur: list) -> np.ndarray:
     return out
 
 
-def choose(entry_opts, scores, swappable, n_players, max_exposure, keep_bonus=1e-4, pos=None, sal=None):
+def choose(entry_opts, scores, swappable, n_players, max_exposure, keep_bonus=1e-4, pos=None, sal=None, exc=None):
     """One option per entry maximizing the summed objective, each swappable player in at most
     max_exposure of entries (locked players aren't counted - they can't move), and never the same
     lineup in two entries (Kenny's rule)."""
@@ -251,6 +251,9 @@ def choose(entry_opts, scores, swappable, n_players, max_exposure, keep_bonus=1e
     if sal is not None:                       # Kenny 11/08: players at or under $4,500 at most 30%
         cheap = np.asarray(sal) <= float(S("rules.cheap_salary"))
         capv[cheap] = np.minimum(capv[cheap], max(1, int(np.floor(float(S("rules.cheap_max_exposure")) * E + 1e-9))))
+    for i, frac in (exc or {}).items():       # research-argued mispricing exceptions
+        if pos is None or pos[i] not in ("QB", "DST"):
+            capv[i] = min(cap, max(1, int(np.floor(frac * E + 1e-9))))
     cons = [LinearConstraint(A1, 1, 1)]
     if ps and E >= 2:
         cons.append(LinearConstraint(cnt[ps], 0, capv[ps]))
@@ -289,7 +292,7 @@ def _legal(lu, P, ctx) -> bool:
 
 def reevaluate(pool: pd.DataFrame, fpA: np.ndarray, fpB: np.ndarray, currents: list, contests_of: list,
                contests: dict, fld: np.ndarray, allow: np.ndarray, rules, dead: np.ndarray,
-               now: datetime | None = None, seed: int = 7) -> dict:
+               now: datetime | None = None, seed: int = 7, exc: dict | None = None) -> dict:
     """currents: per entry, 9 pool indices in slot order (None = empty); contests_of: contest id per
     entry. Returns {"lineups": per entry, "changed": [...], "locked": mask, "log": [...]}."""
     locked = locked_mask(pool, now)
@@ -341,7 +344,7 @@ def reevaluate(pool: pd.DataFrame, fpA: np.ndarray, fpB: np.ndarray, currents: l
         sig = significant(eo, perA, perB, forced, margin, z, n_test)
         kept = [[eo[i][j] for j, _ in s] for i, s in enumerate(sig)]
         sc = [[v for _, v in s] for s in sig]
-        pick = choose(kept, sc, ~locked, len(pool), float(S("portfolio.max_exposure")), pos=P.pos, sal=P.sal)
+        pick = choose(kept, sc, ~locked, len(pool), float(S("portfolio.max_exposure")), pos=P.pos, sal=P.sal, exc=exc)
         names, ownr = pool["Name"].to_numpy(object), own
         for i, k in enumerate(ent):
             new = kept[i][pick[i]]
