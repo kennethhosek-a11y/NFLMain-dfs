@@ -19,19 +19,20 @@
    "field": 198176,
    "fee": 3.0,
    "filled": 20,
-   "note": "quality floor relaxed to 75% / $47,000",
+   "note": "quality floor relaxed to 75% of the best projection",
    "payouts": "estimated",
    "objective": "top-1% (portfolio)",
-   "p_any_top1": 0.3978,
-   "avg_top1": 0.03629,
-   "cash": 0.41664,
-   "roi_reported": 12.791696548461914,
-   "value": 0.57925,
+   "p_any_top1": 0.4974,
+   "avg_top1": 0.0509,
+   "cash": 0.50016,
+   "roi_reported": 18.325637817382812,
+   "value": 0.7519,
    "swaps": [],
    "stacks": {
-    "LV": 9,
-    "WAS": 6,
-    "NYJ": 5
+    "LV": 5,
+    "MIA": 5,
+    "WAS": 5,
+    "DAL": 5
    },
    "slate": "main"
   },
@@ -42,28 +43,18 @@
    "field": 118906,
    "fee": 1.0,
    "filled": 20,
-   "note": "quality floor relaxed to 75% / $47,000",
+   "note": "quality floor relaxed to 75% of the best projection",
    "payouts": "estimated",
    "objective": "top-1% (portfolio)",
-   "p_any_top1": 0.4652,
-   "avg_top1": 0.04584,
-   "cash": 0.4864,
-   "roi_reported": 8.463125228881836,
-   "value": 0.6944,
-   "swaps": [
-    {
-     "slot": 0,
-     "out": 195,
-     "in": 983,
-     "gain_B": -0.00035,
-     "se_B": 0.0027953601391701804,
-     "accepted": false
-    }
-   ],
+   "p_any_top1": 0.5124,
+   "avg_top1": 0.06124,
+   "cash": 0.55607,
+   "roi_reported": 12.03935432434082,
+   "value": 0.8186,
+   "swaps": [],
    "stacks": {
-    "LV": 7,
-    "DAL": 7,
-    "NYJ": 6
+    "NYJ": 10,
+    "WAS": 10
    },
    "slate": "main"
   },
@@ -74,41 +65,24 @@
    "field": 356718,
    "fee": 0.5,
    "filled": 150,
-   "note": "quality floor relaxed to 75% / $47,000",
+   "note": "quality floor relaxed to 75% of the best projection",
    "payouts": "estimated",
    "objective": "top-1% (portfolio)",
-   "p_any_top1": 0.9362,
-   "avg_top1": 0.072924,
-   "cash": 0.5951813333333333,
-   "roi_reported": 46.0544548034668,
-   "value": 1.30082,
-   "swaps": [
-    {
-     "slot": 2,
-     "out": 985,
-     "in": 2126,
-     "gain_B": -0.0008799999999999997,
-     "se_B": 0.0003379039315019818,
-     "accepted": false
-    },
-    {
-     "slot": 4,
-     "out": 212,
-     "in": 2126,
-     "gain_B": -0.0003600000000000001,
-     "se_B": 0.0001221081300013059,
-     "accepted": false
-    }
-   ],
+   "p_any_top1": 0.9132,
+   "avg_top1": 0.07538533333333333,
+   "cash": 0.6056133333333333,
+   "roi_reported": 44.9091796875,
+   "value": 1.2901266666666666,
+   "swaps": [],
    "stacks": {
     "LV": 69,
-    "NYJ": 35,
-    "WAS": 12,
-    "SF": 8,
-    "DET": 8,
-    "DAL": 7,
-    "CLE": 6,
-    "KC": 5
+    "NYJ": 38,
+    "WAS": 18,
+    "SF": 5,
+    "MIA": 5,
+    "NE": 5,
+    "DAL": 5,
+    "CAR": 5
    },
    "slate": "main"
   }
