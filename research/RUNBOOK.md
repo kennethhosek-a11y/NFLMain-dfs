@@ -38,9 +38,23 @@ player**. Live scores condition the sims for games already played.
 - Locked players never move.
 - It writes a new file only if something changed.
 
+## Lineup rules workbook (read it every week)
+The newest `research/rules/NFL_DFS_Lineup_Rules_<date>.xlsx` holds Kenny's starting build rules.
+CLAUDE.md says how to use it: his Y/N and settings columns win, hard vs soft, and "Opinion"
+rules get backtested first.
+- **Tuesday:** open it, check whether Kenny filled in or changed the yellow columns, and list
+  in the reply which rules are in force, which are proposed, and which differ from the current
+  settings.
+- **Before every build:** check the build follows every rule marked Y. Use NFL Main Rules for
+  Early and Main slates. Use NFL Main Rules plus Short Slate Changes for Afternoon (2-4 games) and
+  Thanksgiving.
+- **After results come in:** compare our lineups with the rules' targets, e.g. the share of
+  double stacks, bring-backs and FLEX positions. Mention anything far off.
+
 ## Schedule
 
 ### Tuesday (once DK posts the next Sunday's salaries, usually Monday night or Tuesday)
+- Read the newest lineup-rules workbook (see "Lineup rules workbook" above).
 - `python -m nflmain slates` to get the slate shape: which slates, how many games, lock times.
 - Run the workbook for each slate Kenny usually plays, then send it at the end of the reply.
 - Summarize:

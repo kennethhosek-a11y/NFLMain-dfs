@@ -9,3 +9,6 @@ research/prep/out/
 *.key
 DKEntries*.csv
 !tests/**/*.csv
+
+# Kenny's lineup-rules workbooks are committed on purpose
+!research/rules/*.xlsx
