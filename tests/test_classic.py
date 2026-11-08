@@ -235,6 +235,10 @@ def test_rule_updates_1108():
     """Kenny 11/08: 0-or-5 by contest size, leverage caps, bust-aware cheap caps."""
     import numpy as np
     from nflmain.portfolio import Extra, min_count
+    pins = {"portfolio.max_exposure": 0.5, "portfolio.min_count": 5, "rules.qb_max_exposure": 0.5,
+            "rules.dst_max_exposure": 0.5, "rules.cheap_max_exposure": 0.30}
+    for k, v in pins.items():                # independent of today's / standing settings files
+        SET.override(k, v)
     assert min_count(20) == 1 and min_count(29) == 1
     assert min_count(30) == 3 and min_count(99) == 3
     assert min_count(150) == 5 and min_count(150, initial=False) == 1
@@ -250,6 +254,8 @@ def test_rule_updates_1108():
     assert cap[3] == 21                      # 2 x 2% + 10 = 14%
     e.exceptions = {2: 0.25}
     assert e.player_caps(150, 1, 4)[2] == 37  # an argued exception still wins
+    for k in pins:
+        SET._overrides.pop(k, None)
 
 
 def test_prelock_news_check_changes_only_news_entries(proj):
