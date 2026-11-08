@@ -56,9 +56,15 @@ something, it tells Kenny to ask in the latest NFL Main chat.
   Thanksgiving), with that slate type's settings.
 - **Locked players are never moved.** A player whose game has started stays in his slot
   (`lateswap.locked_mask`).
-- Initial build only: each player is in 0 lineups or at least 5 (contests with 10+ entries).
-  The rule is off after the first lock.
+- Initial build only: each player is in 0 lineups or at least 5 (contests with 100+ entries);
+  at least 3 for 30-99 entries; no minimum under 30 entries (Kenny, 11/08/2026). The rule is off
+  after the first lock.
 - No player in more than 50% of lineups. No lineup used twice anywhere in the portfolio.
+- Rule updates (Kenny, 11/08/2026):
+  - Leverage cap: each player in at most 2x his projected ownership + 10 points.
+  - Cheap players ($4,500 or under): the cap falls from 30% to 15% as their bust rate rises.
+  - The biggest contest is built first.
+  - Before the first lock, a news check changes only entries holding a player with news.
 - Large fields are judged as a portfolio on top-1% finishes. Small fields are judged on cash rate.
   ROI is reported only.
 - Swaps must be confirmed on independent simulations. Late-swap options are built in parallel

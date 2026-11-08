@@ -114,7 +114,9 @@ def test_build_portfolio_rules(proj):
     SET.override("rules.dst_max_exposure", 1.0)
     SET.override("rules.share_band", 1.0)
     for k, v in (("main.rb_per_team", 2), ("main.qb_own_rb", 2), ("rules.no_qb_team_max", 8), ("main.max_per_team", 5),
-                 ("rules.max_rb_runback", 3), ("rules.flex_rb_max", 1.0)):
+                 ("rules.max_rb_runback", 3), ("rules.flex_rb_max", 1.0),
+                 # 0-or-5 is off under 30 entries since 11/08; test the full rule on 12 entries here
+                 ("portfolio.min_count_off_below", 10), ("portfolio.min_count_full_entries", 10)):
         SET.override(k, v)
     c = C.Contest("1", "test", 1.0, 5000, entry_ids=[str(i) for i in range(12)], prize_pool=4000)
     res = pipeline.build(proj, [c])
@@ -127,7 +129,7 @@ def test_build_portfolio_rules(proj):
     assert cnt.max() <= portfolio.caps(12)                  # 50% cap
     for k in ("rules.qb_max_exposure", "rules.dst_max_exposure", "rules.share_band", "main.rb_per_team",
               "main.qb_own_rb", "rules.no_qb_team_max", "main.max_per_team", "rules.max_rb_runback",
-              "rules.flex_rb_max"):
+              "rules.flex_rb_max", "portfolio.min_count_off_below", "portfolio.min_count_full_entries"):
         SET._overrides.pop(k, None)
     assert len({L.key(x) for x in lus}) == 12               # no lineup twice
     used = cnt[cnt > 0]
@@ -229,6 +231,60 @@ def test_exposure_exception_needs_a_note(tmp_path):
     assert capv[0] == min(9, portfolio.caps(20)) and capv[1] == 6   # 45% (never above the overall cap); plain cheap 30%
 
 
+def test_rule_updates_1108():
+    """Kenny 11/08: 0-or-5 by contest size, leverage caps, bust-aware cheap caps."""
+    import numpy as np
+    from nflmain.portfolio import Extra, min_count
+    pins = {"portfolio.max_exposure": 0.5, "portfolio.min_count": 5, "rules.qb_max_exposure": 0.5,
+            "rules.dst_max_exposure": 0.5, "rules.cheap_max_exposure": 0.30}
+    for k, v in pins.items():                # independent of today's / standing settings files
+        SET.override(k, v)
+    assert min_count(20) == 1 and min_count(29) == 1
+    assert min_count(30) == 3 and min_count(99) == 3
+    assert min_count(150) == 5 and min_count(150, initial=False) == 1
+    pos = np.array(["WR", "WR", "WR", "QB"], object)
+    sal = np.array([7000, 4000, 4000, 6000])
+    own = np.array([40.0, 5.0, 5.0, 2.0])
+    bust = np.array([0.3, 0.40, 0.70, 0.3])
+    e = Extra.from_settings(pos, {}, sal, own=own, bust=bust)
+    cap = e.player_caps(150, 1, 4)
+    assert cap[0] == 75                      # 2 x 40% + 10 = 90% -> held to the 50% cap
+    assert cap[1] == 30                      # cheap, low bust: leverage 20% (cheap cap 30%)
+    assert cap[2] == 22                      # cheap, high bust: 15% cap (22 of 150)
+    assert cap[3] == 21                      # 2 x 2% + 10 = 14%
+    e.exceptions = {2: 0.25}
+    assert e.player_caps(150, 1, 4)[2] == 37  # an argued exception still wins
+    for k in pins:
+        SET._overrides.pop(k, None)
+
+
+def test_prelock_news_check_changes_only_news_entries(proj):
+    """Kenny 11/08: before any game starts, a news check changes only entries holding a player with
+    news (or a player who is out) - no churn from re-running the sims."""
+    pool = proj.df[proj.df["Projection"] > 0.05].reset_index(drop=True)
+    P = L.Pool.from_df(pool)
+    rules = L.Rules.for_slate("main")
+    opt = L.Optimizer(P, rules, np.ones(len(pool)))
+    rng = np.random.default_rng(4)
+    fpA = pipeline.sims_for(proj, pool, 1500, 5)
+    fpB = pipeline.sims_for(proj, pool, 1500, 6)
+    cur = [L.assign_slots(opt.solve(fpA[:, k]), P) for k in range(6)]
+    now = datetime.fromisoformat(f"{synth.DAY}T09:00:00-05:00")   # nothing locked
+    assert not lateswap.locked_mask(pool, now).any()
+    fld = L.field(2000, pool["Ownership"].to_numpy(), P, rng, min_salary=40000)
+    c = C.Contest("9", "t", 1.0, 3000, entry_ids=[str(i) for i in range(6)], prize_pool=2500)
+    dead = np.zeros(len(pool), bool)
+    dead[cur[0][1]] = True                                        # entry 0 holds a player now out
+    news = np.zeros(len(pool), bool)
+    news[cur[0][1]] = True
+    others = {i for k in range(1, 6) for i in cur[k]}
+    SET.override("lateswap.options", 10)
+    res = lateswap.reevaluate(pool, fpA, fpB, cur, ["9"] * 6, {"9": c}, fld, np.ones(len(pool), bool),
+                              rules, dead, now, news=news)
+    assert cur[0][1] not in res["lineups"][0]                     # the out player is replaced
+    for k in range(1, 6):
+        if cur[0][1] not in cur[k]:
+            assert sorted(res["lineups"][k]) == sorted(cur[k])    # untouched entries stay as they are
 def test_started_games_keep_their_game_info(tmp_path, monkeypatch):
     """Found live 11/08/2026: once the 1:00 games start, DK's salary file shows 'In-Progress'
     instead of the game - it must be filled back in (else every late swap crashes)."""

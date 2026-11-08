@@ -25,7 +25,13 @@ build:
 
 portfolio:
   max_exposure:  {default: 0.5, min: 0.1, max: 1.0,  type: float, label: "Max exposure per player", help: "Largest share of your lineups any one player can be in (0.5 = 50%). Always at least 1 lineup."}
-  min_count:     {default: 5,   min: 1,   max: 30,   type: int,   label: "Minimum lineups for a player you use", help: "Initial build only: each player is in 0 lineups or at least this many (contests with 10+ entries). Off after the first lock. 1 = off."}
+  min_count:     {default: 5,   min: 1,   max: 30,   type: int,   label: "Minimum lineups for a player you use", help: "Initial build only: each player is in 0 lineups or at least this many (contests with min_count_full_entries+ entries). Off after the first lock. 1 = off."}
+  select_budget: {default: 60, min: 10, max: 600, type: int, label: "Seconds for one portfolio pick", help: "Whole-portfolio solver attempts stop after this long and the fallback picker takes over, so a build never runs away."}
+  min_count_off_below:   {default: 30,  min: 1, max: 1000, type: int, label: "0-or-5 off below this many entries", help: "Kenny 11/08: the 0-or-5 rule boxed 20-entry contests into 4 QBs x 5. Contests with fewer entries than this have no minimum."}
+  min_count_mid:         {default: 3,   min: 1, max: 30,   type: int, label: "Minimum lineups in mid-size contests", help: "Contests from min_count_off_below up to min_count_full_entries entries: each player in 0 or at least this many lineups."}
+  min_count_full_entries: {default: 100, min: 1, max: 1000, type: int, label: "Full 0-or-5 from this many entries", help: "Contests with at least this many entries use min_count (5)."}
+  leverage_mult: {default: 2.0, min: 0.0, max: 10.0, type: float, label: "Leverage cap: x field ownership", help: "Kenny 11/08: a player's cap = this x his projected ownership + leverage_add (never above max_exposure). 0 = off."}
+  leverage_add:  {default: 0.10, min: 0.0, max: 1.0, type: float, label: "Leverage cap: plus this share", help: "Added to leverage_mult x ownership (0.10 = 10 points), so low-owned players can still be played."}
   top1_weight:   {default: 5.0, min: 0.0, max: 20.0, type: float, label: "Top-heavy vs spread out", help: "Large contests: P(at least one lineup top 1%) + this x the average top-1% rate."}
   swap_z:        {default: 2.0, min: 1.0, max: 4.0,  type: float, label: "Swap confidence (standard errors)", help: "A swap must win on independent simulations by more than this many standard errors."}
   swap_tries:    {default: 12,  min: 1,   max: 50,   type: int,   label: "Swap options tried per lineup", help: ""}
@@ -37,6 +43,7 @@ contest:
 lateswap:
   options:        {default: 40,  min: 5,   max: 200, type: int,   label: "Late-swap options per entry", help: "Best fills of the open spots in this many simulated slates are tried for each entry."}
   confirm_options: {default: 6,  min: 1,   max: 20,  type: int,   label: "Options confirmed on independent sims", help: "Best options per entry tested on a fresh set of simulations (z bar adjusted for the number tested)."}
+  prelock_news_only: {default: 1, min: 0, max: 1, type: int, label: "Before the first lock: change only entries with news", help: "Kenny 11/08: a news check before any game starts changes only entries holding a player with material news (status change or projection move). 0 = any entry may change. After the first lock late swap is free."}
   margin:         {default: 0.002, min: 0.0, max: 0.05, type: float, label: "Minimum gain to swap", help: "On the contest objective (top-1% rate or cash score)."}
 
 model:
@@ -138,6 +145,9 @@ rules:
   max_cheap_per_lineup: {default: 2, min: 0, max: 9, type: int, label: "Most cheap QB/RB/WR per lineup", help: "Kenny 11/08: never 3 QB/RB/WR at or under the cheap salary in one lineup (TE and DST don't count). Real best lineups 2021 (real DK salaries): 0 15%, 1 48%, 2 31%, 3+ 6%."}
   two_cheap_max:      {default: 0.18, min: 0.0, max: 1.0, type: float, label: "Most lineups with 2 cheap QB/RB/WR", help: "Kenny 11/08: up to 18% of lineups may have 2 cheap QB/RB/WR."}
   cheap_max_exposure: {default: 0.30, min: 0.05, max: 1.0, type: float, label: "Max exposure for a cheap player", help: "Kenny 11/08: anyone at $4,500 or less in at most 30% of lineups. Never below the 0-or-5+ minimum."}
+  cheap_bust_ok:      {default: 0.45, min: 0.0, max: 1.0, type: float, label: "Cheap player: bust rate allowed the full cap", help: "Kenny 11/08: cheap players busting (under 2x salary) this often or less keep cheap_max_exposure."}
+  cheap_bust_bad:     {default: 0.65, min: 0.0, max: 1.0, type: float, label: "Cheap player: bust rate held to the low cap", help: "Cheap players busting this often or more get cheap_min_exposure; straight line in between."}
+  cheap_min_exposure: {default: 0.15, min: 0.0, max: 1.0, type: float, label: "Low cap for a high-bust cheap player", help: "Never below the 0-or-5+ minimum. A research-argued exception (overrides MaxExposure) still wins."}
   inside_out:         {default: 0,    min: 0,   max: 1,   type: int,   label: "Inside-out build (safe lineups first, then more risk)", help: "OFF until it works with the 0-or-5+ rule (11/08 test: tiers mostly dropped). Kenny 11/08: ~5 per 150 safe lineups (every player at or below his position's usual bust rate), more risk step by step, the rest chase top 1%."}
   middle_share:       {default: 0.40, min: 0.0, max: 1.0, type: float, label: "Share of lineups in the safe + middle tiers", help: "Half of it at most 5 points above the position's usual bust rate, all of it at most 12 points above."}
   flex_rb_max:        {default: 0.45, min: 0.0, max: 1.0, type: float, label: "Most lineups with an RB in FLEX", help: "Workbook M11 (RB ~35-40% of FLEX). Kenny 11/08: our builds had 77% RB in FLEX."}

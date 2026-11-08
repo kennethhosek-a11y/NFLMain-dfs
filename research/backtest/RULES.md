@@ -40,3 +40,21 @@ Caveats:
   here than it is.
 - Salaries are synthetic for 2022-2026 W8.
 - Effects are small: tenths of a point of percent-of-optimal, except M15 and SS5.
+
+## Kenny's 11/08 list, item 7: QB with up to 3 of his own pass-catchers (`research/backtest/stack3.py`)
+Same method as above (294 real slates 2021-2026, 2026 weighted x3, 2025 x1.5; 20 lineups from 30
+simulated slates; scored on what really happened). Every other hard rule stays on.
+
+| | Best lineup, % of optimal | 3rd-best | 2026 only (23 slates) |
+|---|---|---|---|
+| Up to 3 allowed vs max 2 | +0.05 ± 0.08 | +0.03 ± 0.05 | -0.11 / +0.17 |
+
+- No measurable difference. When allowed, triples were picked in only 3% of lineups.
+- The real best lineup had QB + 3 pass-catchers on only 2% of slates.
+- **Verdict: keep the hard max of 2** (workbook M2). This test can't see ownership; triples are
+  rarely played by the field, but they also rarely win.
+
+## Item 6: QB 25% / DST 15% caps
+Already tested above as M15: **-1.48 ± 0.25** points of % of optimal (hurts). The test can't see
+ownership, so the leverage the caps aim for isn't measured. Kenny's standing setting keeps them on
+(data/settings/standing.yaml); his call.
