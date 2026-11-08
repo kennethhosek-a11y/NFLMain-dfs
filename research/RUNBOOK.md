@@ -55,6 +55,13 @@ rules get backtested first.
 
 ### Tuesday (once DK posts the next Sunday's salaries, usually Monday night or Tuesday)
 - Read the newest lineup-rules workbook (see "Lineup rules workbook" above).
+- **History database: add last week.** Run `python -m research.history.build_db --season 2026`.
+  - It adds the week just finished: stats, DK points, closing lines, slate tags, and the real DK
+    salaries saved from last week's runs.
+  - Check that the printed "last completed week" moved up by one.
+  - Commit and push `data/research/history/` with the other data.
+  - Every few weeks, re-run `python -m research.backtest.slate_size gate` and `portfolio` (2026
+    weeks count triple). Tell Kenny if a setting should move. Changing a default is a pull request.
 - `python -m nflmain slates` to get the slate shape: which slates, how many games, lock times.
 - Run the workbook for each slate Kenny usually plays, then send it at the end of the reply.
 - Summarize:
@@ -104,6 +111,25 @@ rules get backtested first.
   - final reply on how entries stand;
   - remind Kenny to upload contest results (DK contest standings CSV) on Monday.
 
+### Sunday night (~8:30 PM, after the last main-slate game): save the contest downloads
+DK deletes contest downloads after 10 days, and they are our only ownership training data
+(research/ownership, recommendation #1).
+- Push a notification:
+  "Save DK contest files: Play-Action, First Down, mini-MAX + Milly Maker - upload them here".
+  Give Kenny these steps:
+  1. On draftkings.com: **My Contests → Completed**. Click each NFL Main contest.
+  2. In the contest page, click **Export Lineups to CSV** (some screens say "Download standings").
+     It downloads `contest-standings-<id>.zip`.
+  3. Do the same for this week's **Milly Maker**. It needs at least one entry from him.
+  4. Upload all the files to this chat (zip or csv both work).
+- When they arrive: `python -m nflmain results <files> --date <Sun date>`.
+  - Reply with the field's habits in plain words: how often the field stacked, double stacks,
+    bring-backs, FLEX split, salary used, duplicates, top-owned players.
+  - Compare our projected ownership with the real %Drafted for the top 15.
+  - Commit and push `data/contests/`.
+- If nothing has arrived by Monday 6 PM, remind him once more. The files must be saved by
+  Wednesday.
+
 ### Monday / after the week
 - Contest results go in `data/contests/`. Ingesting them to retrain ownership is planned; see the
   HANDOFF "Next" list.
@@ -114,6 +140,14 @@ rules get backtested first.
     runbook, do Tuesday's early look, schedule the week's wake-ups, and list open items
     (unmerged pull requests, contest results, anything unfinished).
   - Once the "NFL Main weekly" scheduled task exists (below), it does this instead.
+
+## Ownership research (read before any ownership work)
+`research/ownership/` holds the report and the newest `NFL_Ownership_Projection_Research_<date>.xlsx`.
+- Its Recommendations sheet is the plan. Kenny's Y/N column wins, and a blank means ask first.
+- #1 (save every contest download) runs every Sunday night, see above.
+- Weak items are starting guesses, refitted from the saved downloads.
+- On Tuesdays, list which recommendations are in force, which are waiting for Kenny's Y/N, and
+  which starting guesses the data has replaced so far.
 
 ## Scheduled task (after the first real slate works)
 Create **one** scheduled task named **`NFL Main weekly`**. Every Tuesday at 9:41 AM Eastern

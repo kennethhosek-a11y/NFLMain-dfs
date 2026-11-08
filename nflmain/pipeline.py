@@ -257,6 +257,17 @@ def save_run(p: Projections) -> None:
             "windows": slate.windows(p.df), "built": datetime.now(ET).isoformat()}
     (d / "slate.json").write_text(json.dumps(meta, indent=1, default=str))
     stacks(p).to_csv(d / "stacks.csv", index=False)
+    keep_salaries(p)
+
+
+def keep_salaries(p: Projections) -> None:
+    """Keep this slate's real DK salaries for the history database (research/history): one file
+    per game day and slate, replaced on every run."""
+    k = p.df[["Name", "name_key", "pos", "team", "game", "Salary", "kickoff"]].rename(columns={"Salary": "salary"})
+    k = k.assign(day=k["kickoff"].str[:10], slate=p.label).drop(columns="kickoff")
+    d = ROOT / "data" / "research" / "history" / "dk_salaries"
+    d.mkdir(parents=True, exist_ok=True)
+    k.to_csv(d / f"{p.day}_{p.label}.csv.gz", index=False)
 
 
 def stacks(p: Projections, top: int = 3) -> pd.DataFrame:

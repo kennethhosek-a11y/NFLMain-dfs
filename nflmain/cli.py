@@ -7,6 +7,7 @@
   news       refresh + re-evaluate every entry against every UNLOCKED player (late swap); also
              the inactives / T-20 / between-windows check
   entries    where each entry stands (live points, projected final, top-1% chance)
+  results    save DK contest downloads for good (they vanish after 10 days) + the field's habits
   settings   what settings apply (--import <folder> from the settings page)
 """
 from __future__ import annotations
@@ -301,6 +302,24 @@ def _standings(pool, fp, lineups, sub, cons, fld, lv):
             print(f"  ... {len(df) - 30} more; median top-1% chance {df['top1%'].median():.2f}%")
 
 
+def cmd_results(a):
+    """Save DK contest downloads for good and measure the field's habits (ownership rec. #1)."""
+    from . import results
+    day = a.date or settings.slate_date().isoformat()
+    sal = results.saved_salaries(day)
+    if sal is None:
+        print(f"[results] no saved DK salary file for {day}: stacks and salary used can't be measured")
+    for f in a.files:
+        h = results.save(f, day, sal, a.name or "")
+        print(f"[results] {Path(f).name}: contest {h['contest_id']}, {h.get('entries', 0):,} entries saved "
+              f"-> data/contests/{day}/")
+        for k in ("qb_stacked", "double_stack", "triple_stack", "bring_back", "flex_RB", "flex_WR", "flex_TE",
+                  "avg_salary", "share_duplicated", "most_copies"):
+            if k in h:
+                print(f"    {k}: {h[k]}")
+        print(f"    top owned: {h.get('top_owned', '')}")
+
+
 def cmd_settings(a):
     if a.import_path:
         eff = settings.import_dashboard(settings.payload_from(Path(a.import_path)))
@@ -352,6 +371,10 @@ def main(argv=None):
         s.add_argument("--what", help="label in the upload file name (e.g. inactives, t20)")
         s.add_argument("--sims-build", type=int)
         s.set_defaults(fn=cmd_news)
+    s = sub.add_parser("results", help="save DK contest downloads (full lineups + %Drafted)")
+    s.add_argument("files", nargs="+")
+    s.add_argument("--name", help="contest name (optional)")
+    s.set_defaults(fn=cmd_results)
     s = sub.add_parser("settings")
     s.add_argument("--import", dest="import_path")
     s.add_argument("--json", action="store_true")
