@@ -126,14 +126,15 @@ def _value(metrics, large, n):
     return v + 1e-6 * metrics["pay"].mean(axis=1)
 
 
-def exact(metrics, lus, n, large, exclude=(), initial=True, stack=None, time_limit=30) -> list[int]:
+def exact(metrics, lus, n, large, exclude=(), initial=True, stack=None, time_limit=30, extra=None) -> list[int]:
     """All n lineups at once (MILP): best total stand-alone value under the caps; [] if infeasible."""
     from scipy.optimize import Bounds, LinearConstraint, milp
-    from scipy.sparse import csr_matrix, hstack, identity
+    from scipy.sparse import csr_matrix, diags, hstack, identity
     L = len(lus)
     cap, k = caps(n), min_count(n, initial)
     val = _value(metrics, large, n)
     P = int(lus.max()) + 1
+    capv = extra.player_caps(n, k, P) if extra is not None else np.full(P, cap)
     rows = lus.ravel()
     cols = np.repeat(np.arange(L), lus.shape[1])
     A_p = csr_matrix((np.ones(len(rows)), (rows, cols)), shape=(P, L))
@@ -148,10 +149,10 @@ def exact(metrics, lus, n, large, exclude=(), initial=True, stack=None, time_lim
     if k > 1:
         Z = identity(P, format="csr")
         cons = [LinearConstraint(np.r_[np.ones(L), np.zeros(P)][None, :], n, n),
-                LinearConstraint(hstack([A_p, -cap * Z]).tocsr(), -np.inf, 0),
+                LinearConstraint(hstack([A_p, -diags(capv.astype(float))]).tocsr(), -np.inf, 0),
                 LinearConstraint(hstack([A_p, -k * Z]).tocsr(), 0, np.inf)]
     else:
-        cons = [LinearConstraint(np.ones((1, L)), n, n), LinearConstraint(A_p, 0, cap)]
+        cons = [LinearConstraint(np.ones((1, L)), n, n), LinearConstraint(A_p, 0, capv)]
     for _, A in extra:
         cons.append(LinearConstraint(pad(A), 0, cap))
     ub = np.ones(L + nz)
@@ -195,7 +196,28 @@ def joint(metrics, lus, n, large, exclude=(), k_min=1, stack=None, pool=700, min
     from scipy.optimize import Bounds, LinearConstraint, milp
     from scipy.sparse import coo_matrix, csr_matrix, diags, hstack, identity
     val = _value(metrics, large, n)
-    order = [j for j in np.argsort(-val) if j not in set(exclude)][:pool]
+    ex_set = set(exclude)
+    ranked = [j for j in np.argsort(-val) if j not in ex_set]
+    order = ranked[:pool]
+    if extra is not None and extra.pos is not None and extra.pos_caps:
+        # with per-QB / per-DST caps the best `pool` lineups can all share a few QBs (e.g. one cheap
+        # QB stack dominates), leaving too few lineups to fill n under the caps: also take each
+        # QB's and each DST's best lineups so every capped position has enough to choose from
+        have = set(order)
+        capv_all = extra.player_caps(n, k_min, int(lus.max()) + 1)
+        for p_ in extra.pos_caps:
+            by: dict = {}
+            for j in ranked:
+                for pl in lus[j]:
+                    if extra.pos[pl] == p_:
+                        lst = by.setdefault(int(pl), [])
+                        if len(lst) < 3 * int(capv_all[pl]):
+                            lst.append(j)
+            for lst in by.values():
+                for j in lst:
+                    if j not in have:
+                        have.add(j)
+                        order.append(j)
     top = np.array(order)
     K = len(top)
     if K < n:
@@ -274,7 +296,7 @@ def select(metrics, lus, n, large, exclude=(), initial=True, stack=None, quiet=F
     ch = greedy(metrics, lus, n, large, exclude, stack, extra)
     if not meets_min_count(ch, lus, n, initial):
         ch = []
-    ex = exact(metrics, lus, n, large, exclude, initial, stack) if n >= 2 else []
+    ex = exact(metrics, lus, n, large, exclude, initial, stack, extra=extra) if n >= 2 else []
     if ex and (len(ch) < n or per_sim_value(metrics, ex, large).mean() > per_sim_value(metrics, ch, large).mean()):
         return ex
     if len(ch) < n and stack is not None:          # relax the stack-team cap before anything else
