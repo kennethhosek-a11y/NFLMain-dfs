@@ -1,0 +1,8 @@
+pandas>=2.0
+numpy
+scipy
+requests
+pyarrow
+openpyxl
+pyyaml
+pytest

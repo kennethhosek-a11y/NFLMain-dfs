@@ -1,0 +1,106 @@
+# Build settings for nflmain (DraftKings NFL Classic): every setting, its default and safe range.
+#
+# Layers, later wins:
+#   1. default            (this file; changes here go through a pull request)
+#   2. from now on        data/settings/standing.yaml      {key: value}
+#   3. today only         data/settings/<slate date>.yaml  {key: value}
+# A value outside its range, of the wrong type, or for an unknown key is rejected (the lower layer's
+# value stays) and reported. Slate date = today in Eastern time (before 6 AM ET: the previous day).
+#
+# Per-slate-type settings live under early / main / afternoon / thanksgiving. The slate type comes from
+# the DK draft group of each contest in the DKEntries file (nflmain/slate.py: slate_type).
+# They start from judgment + the NBA gate research and are re-tuned by research/gates (backtest by
+# slate size) - see research/gates/README.md.
+#
+# Fields: default, min, max, type (int | float), label (plain words), help.
+
+build:
+  sims:          {default: 5000,  min: 1000,  max: 20000, type: int,   label: "Number of simulations", help: "Simulated slates used to score and pick lineups (two independent sets of this size: one to pick, one to confirm)."}
+  proj_sims:     {default: 10000, min: 3000,  max: 50000, type: int,   label: "Simulations for projections", help: "Simulated slates behind every projection, floor and ceiling."}
+  worlds:        {default: 600,   min: 50,    max: 1500,  type: int,   label: "Simulated slates used to make candidate lineups", help: "The best lineup (under the stacking rules) in each of this many simulated slates becomes a candidate."}
+  field_sample:  {default: 10000, min: 2000,  max: 50000, type: int,   label: "Simulated opponent lineups", help: "Opponent lineups drawn from projected ownership to rank yours against."}
+  min_salary:    {default: 48500, min: 44000, max: 50000, type: int,   label: "Minimum salary per lineup", help: "Never enter a lineup that spends less than this."}
+  min_proj_frac: {default: 0.85,  min: 0.5,   max: 1.0,   type: float, label: "Minimum lineup projection (share of best)", help: "Never enter a lineup projected below this share of the best lineup."}
+  workers:       {default: 4,     min: 1,     max: 16,    type: int,   label: "Parallel processes", help: "Worker processes for candidate builds and late-swap options (spawned, never forked)."}
+
+portfolio:
+  max_exposure:  {default: 0.5, min: 0.1, max: 1.0,  type: float, label: "Max exposure per player", help: "Largest share of your lineups any one player can be in (0.5 = 50%). Always at least 1 lineup."}
+  min_count:     {default: 5,   min: 1,   max: 30,   type: int,   label: "Minimum lineups for a player you use", help: "Initial build only: each player is in 0 lineups or at least this many (contests with 10+ entries). Off after the first lock. 1 = off."}
+  max_per_team:  {default: 4,   min: 2,   max: 8,    type: int,   label: "Max players from one team", help: "Per lineup, out of 9 (DST counts)."}
+  top1_weight:   {default: 5.0, min: 0.0, max: 20.0, type: float, label: "Top-heavy vs spread out", help: "Large contests: P(at least one lineup top 1%) + this x the average top-1% rate."}
+  swap_z:        {default: 2.0, min: 1.0, max: 4.0,  type: float, label: "Swap confidence (standard errors)", help: "A swap must win on independent simulations by more than this many standard errors."}
+  swap_tries:    {default: 12,  min: 1,   max: 50,   type: int,   label: "Swap options tried per lineup", help: ""}
+  no_offense_vs_dst: {default: 1, min: 0, max: 1,    type: int,   label: "No hitters against your own defense", help: "1 = never roster a QB/RB/WR/TE facing your DST."}
+
+contest:
+  large_field:    {default: 1000, min: 100, max: 100000, type: int,   label: "Large contest threshold", help: "Contests at least this big are judged on top-1% finishes; smaller ones on cashing."}
+  small_finish_w: {default: 0.25, min: 0.0, max: 1.0,    type: float, label: "Small contests: finish weight", help: "Small fields: cash rate + this x share of the field beaten."}
+
+lateswap:
+  options:        {default: 40,  min: 5,   max: 200, type: int,   label: "Late-swap options per entry", help: "Best fills of the open spots in this many simulated slates are tried for each entry."}
+  confirm_options: {default: 6,  min: 1,   max: 20,  type: int,   label: "Options confirmed on independent sims", help: "Best options per entry tested on a fresh set of simulations (z bar adjusted for the number tested)."}
+  margin:         {default: 0.002, min: 0.0, max: 0.05, type: float, label: "Minimum gain to swap", help: "On the contest objective (top-1% rate or cash score)."}
+
+model:
+  p_scratch_q: {default: 0.0,  min: 0.0, max: 1.0,  type: float, label: "Questionable players: build as out (1) or in (0)", help: "Built fully in or out; inactives settle it 90 minutes before kickoff."}
+  p_scratch_d: {default: 1.0,  min: 0.0, max: 1.0,  type: float, label: "Doubtful players: build as out (1) or in (0)", help: ""}
+  half_life:   {default: 4.0,  min: 1.0, max: 16.0, type: float, label: "Recent-games weighting (half-life, games)", help: ""}
+
+gamesim:
+  eff_sd:     {default: 0.30,  min: 0.10, max: 0.60, type: float, label: "Team good-day / bad-day swing", help: ""}
+  pace_sd:    {default: 0.07,  min: 0.0,  max: 0.20, type: float, label: "Game pace swing", help: ""}
+  drives:     {default: 11.0,  min: 9.0,  max: 13.0, type: float, label: "Drives per team", help: ""}
+  p_fg:       {default: 0.20,  min: 0.10, max: 0.35, type: float, label: "Field-goal try share of non-TD drives", help: ""}
+  p_def_td:   {default: 0.045, min: 0.0,  max: 0.15, type: float, label: "Defense / return TD chance per team", help: ""}
+  share_conc: {default: 20.0,  min: 10.0, max: 100.0, type: float, label: "Role steadiness", help: "Tuned on the Showdown history 11/05/2026."}
+  rec_noise:  {default: 0.90,  min: 0.2,  max: 1.0,  type: float, label: "Receiving big-play swing", help: "Tuned on the Showdown history 11/05/2026."}
+  rush_noise: {default: 0.40,  min: 0.2,  max: 1.0,  type: float, label: "Rushing big-play swing", help: ""}
+  td_conc:    {default: 60.0,  min: 5.0,  max: 200.0, type: float, label: "Touchdown spread", help: ""}
+  team_pass_noise: {default: 0.15, min: 0.0, max: 0.5, type: float, label: "Team passing-yards swing", help: ""}
+  team_rush_noise: {default: 0.20, min: 0.0, max: 0.5, type: float, label: "Team rushing-yards swing", help: ""}
+  eff_corr:   {default: 0.0,   min: 0.0,  max: 0.8,  type: float, label: "Lopsided-game tendency", help: ""}
+
+ownership:
+  target_salary:    {default: 49300, min: 46000, max: 50000, type: int,   label: "Field's average salary used", help: "Projected ownership is tilted so the field's lineups average no more than this."}
+  cap:              {default: 60.0,  min: 20.0,  max: 100.0, type: float, label: "Max projected ownership %", help: ""}
+  field_min_salary: {default: 48000, min: 42000, max: 50000, type: int,   label: "Opponents' usual minimum salary", help: ""}
+  field_stack:      {default: 0.70,  min: 0.0,   max: 1.0,   type: float, label: "Share of opponents who stack their QB", help: "Simulated opponents: QB plus at least one of his pass-catchers."}
+  field_double:     {default: 0.30,  min: 0.0,   max: 1.0,   type: float, label: "Share of stacks with two pass-catchers", help: ""}
+  field_bringback:  {default: 0.30,  min: 0.0,   max: 1.0,   type: float, label: "Share of stacks with a bring-back", help: ""}
+
+news:
+  move_pts: {default: 2.0,  min: 0.5, max: 15.0, type: float, label: "News: projection move (points)", help: "A projection change this big (and at least the % below) counts as material news."}
+  move_pct: {default: 0.20, min: 0.05, max: 0.5, type: float, label: "News: projection move (%)", help: ""}
+
+# ---- per slate type -------------------------------------------------------------------------
+# stack_min:   pass-catchers (WR/TE) from the QB's team, always (hard rule)
+# stack_max:   most pass-catchers with the QB tried in candidate builds
+# bringback:   1 = candidate builds also include QB stacks with an opposing skill player (the
+#              portfolio picks how many by simulation); 2 = every lineup must have one
+# gate_pct:    ceiling gate - drop the bottom share of playable players by how often they reach
+#              the slate's winning pace (0 = off)
+# game_max:    most players from one game
+early:
+  stack_min: {default: 1,    min: 0, max: 3,    type: int,   label: "Early: pass-catchers with the QB (minimum)", help: ""}
+  stack_max: {default: 2,    min: 1, max: 3,    type: int,   label: "Early: pass-catchers with the QB (most tried)", help: ""}
+  bringback: {default: 1,    min: 0, max: 2,    type: int,   label: "Early: bring-backs (0 off, 1 allowed, 2 required)", help: ""}
+  gate_pct:  {default: 0.10, min: 0.0, max: 0.5, type: float, label: "Early: ceiling gate (share dropped)", help: "Start = NBA backtest for 5-7 game slates; NFL backtest in research/gates."}
+  game_max:  {default: 5,    min: 3, max: 8,    type: int,   label: "Early: most players from one game", help: ""}
+main:
+  stack_min: {default: 1,    min: 0, max: 3,    type: int,   label: "Main: pass-catchers with the QB (minimum)", help: ""}
+  stack_max: {default: 2,    min: 1, max: 3,    type: int,   label: "Main: pass-catchers with the QB (most tried)", help: ""}
+  bringback: {default: 1,    min: 0, max: 2,    type: int,   label: "Main: bring-backs (0 off, 1 allowed, 2 required)", help: ""}
+  gate_pct:  {default: 0.15, min: 0.0, max: 0.5, type: float, label: "Main: ceiling gate (share dropped)", help: "Start = NBA backtest for 8+ game slates (a flat 25% threw out 15-22% of the real best lineup)."}
+  game_max:  {default: 5,    min: 3, max: 8,    type: int,   label: "Main: most players from one game", help: ""}
+afternoon:
+  stack_min: {default: 1,    min: 0, max: 3,    type: int,   label: "Afternoon: pass-catchers with the QB (minimum)", help: "Small slate: heavier game stacks."}
+  stack_max: {default: 3,    min: 1, max: 3,    type: int,   label: "Afternoon: pass-catchers with the QB (most tried)", help: ""}
+  bringback: {default: 1,    min: 0, max: 2,    type: int,   label: "Afternoon: bring-backs (0 off, 1 allowed, 2 required)", help: ""}
+  gate_pct:  {default: 0.05, min: 0.0, max: 0.5, type: float, label: "Afternoon: ceiling gate (share dropped)", help: "Light: NBA backtest for 3-4 game slates. Small slates have concentrated ownership."}
+  game_max:  {default: 6,    min: 3, max: 8,    type: int,   label: "Afternoon: most players from one game", help: ""}
+thanksgiving:
+  stack_min: {default: 1,    min: 0, max: 3,    type: int,   label: "Thanksgiving: pass-catchers with the QB (minimum)", help: "3-game slate, three lock windows."}
+  stack_max: {default: 3,    min: 1, max: 3,    type: int,   label: "Thanksgiving: pass-catchers with the QB (most tried)", help: ""}
+  bringback: {default: 1,    min: 0, max: 2,    type: int,   label: "Thanksgiving: bring-backs (0 off, 1 allowed, 2 required)", help: ""}
+  gate_pct:  {default: 0.0,  min: 0.0, max: 0.5, type: float, label: "Thanksgiving: ceiling gate (share dropped)", help: ""}
+  game_max:  {default: 6,    min: 3, max: 8,    type: int,   label: "Thanksgiving: most players from one game", help: ""}
