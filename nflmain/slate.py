@@ -149,10 +149,53 @@ def kickoff_of(game_info: str) -> datetime | None:
     return datetime.strptime(f"{m.group(1)} {m.group(2)}", "%m/%d/%Y %I:%M%p").replace(tzinfo=ET)
 
 
+GAME_RE = r"^\w+@\w+ \d\d/\d\d/\d{4} \d\d:\d\d[AP]M"
+STATE_DIR = Path(__file__).resolve().parent.parent / "data" / "state"
+
+
+def _patch_game_info(df: pd.DataFrame) -> pd.DataFrame:
+    """Once a game starts, DK's salary file shows 'In-Progress' / 'Final' instead of
+    'AWAY@HOME date time ET' for its players (found live 11/08/2026, 1:00 games). Every good Game
+    Info seen is remembered by player ID (data/state/game_info.json); started games are filled
+    back in from it, or from the build's baseline files."""
+    gi = df["Game Info"].astype(str)
+    good = gi.str.match(GAME_RE)
+    f = STATE_DIR / "game_info.json"
+    try:
+        known = json.loads(f.read_text()) if f.exists() else {}
+    except Exception:  # noqa: BLE001
+        known = {}
+    if good.any():
+        known.update(dict(zip(df.loc[good, "ID"].astype(str), gi[good])))
+        try:
+            STATE_DIR.mkdir(parents=True, exist_ok=True)
+            f.write_text(json.dumps(known))
+        except OSError:
+            pass
+    if good.all():
+        return df
+    for b in sorted(STATE_DIR.glob("baseline_*.csv")):
+        try:
+            bd = pd.read_csv(b, dtype=str, usecols=["ID", "Game Info"])
+        except Exception:  # noqa: BLE001
+            continue
+        bd = bd[bd["Game Info"].astype(str).str.match(GAME_RE)]
+        for i, g in zip(bd["ID"], bd["Game Info"]):
+            known.setdefault(str(i), g)
+    df = df.copy()
+    fill = df["ID"].astype(str).map(known)
+    m = ~good & fill.notna()
+    df.loc[m, "Game Info"] = fill[m]
+    if (~good & fill.isna()).any():
+        print(f"[slate] {int((~good & fill.isna()).sum())} players in started games with no saved game info")
+    return df
+
+
 def load_classic(src) -> pd.DataFrame:
     """One row per player: Name, ID, Position, Salary, team, opp, home, game, kickoff, status, name_key."""
     df = read_salaries(src)
     df["Salary"] = df["Salary"].astype(int)
+    df = _patch_game_info(df)
     p = df.copy()
     p["team"] = p["TeamAbbrev"].map(canon)
     gm = p["Game Info"].str.extract(r"^(\w+)@(\w+)")
