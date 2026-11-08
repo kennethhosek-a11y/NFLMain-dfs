@@ -135,8 +135,8 @@ rules:
   bringback_share:    {default: 0.5,  min: 0.0, max: 1.0, type: float, label: "Share of lineups with exactly 1 bring-back", help: "Workbook M4 (45-55%)."}
   share_band:         {default: 0.10, min: 0.0, max: 1.0, type: float, label: "Allowed miss on the two shares above", help: "0.10 = target +- 10 points; 1.0 = off."}
   flex_te_max:        {default: 0.10, min: 0.0, max: 1.0, type: float, label: "Most lineups with a TE in FLEX", help: "Workbook M11 (10% or less)."}
-  qb_max_exposure:    {default: 0.25, min: 0.05, max: 1.0, type: float, label: "Max exposure per QB", help: "Workbook M15 (~25%). Never below the 0-or-5+ minimum."}
-  dst_max_exposure:   {default: 0.15, min: 0.05, max: 1.0, type: float, label: "Max exposure per DST", help: "Workbook M15 (~15%). Never below the 0-or-5+ minimum."}
+  qb_max_exposure:    {default: 0.5,  min: 0.05, max: 1.0, type: float, label: "Max exposure per QB", help: "Workbook M15 says ~25%, but it HURT in the backtest (research/backtest/RULES.md), so it's off (= the 50% cap) until Kenny decides. Never below the 0-or-5+ minimum."}
+  dst_max_exposure:   {default: 0.5,  min: 0.05, max: 1.0, type: float, label: "Max exposure per DST", help: "Workbook M15 says ~15%; off for the same reason."}
   min_unique:         {default: 2,    min: 1,   max: 5,   type: int,   label: "Players that must differ between any two lineups", help: "Workbook M16."}
   own_sum_min:        {default: 75,   min: 0,   max: 200, type: float, label: "Lineup total ownership: lowest", help: "Workbook M13 soft band 75-150%."}
   own_sum_max:        {default: 150,  min: 50,  max: 400, type: float, label: "Lineup total ownership: highest", help: "Workbook M13."}
