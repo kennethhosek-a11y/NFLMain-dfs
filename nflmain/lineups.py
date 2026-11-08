@@ -84,6 +84,8 @@ class Rules:
     qb_own_rb: int = 1          # M7: 0 never, 1 only receiving backs, 2 allowed (SS1)
     rb_min_tgt: float = 0.12    # M7: "receiving back" = target share at least this
     max_rb_runback: int = 8     # M4: RBs from our QB's opponent (run-backs should be WR/TE)
+    max_cheap: int = 9          # Kenny 11/08: QB/RB/WR at or under cheap_salary per lineup
+    cheap_salary: float = 4500
     hard: bool = True           # False only in research (e.g. the real best lineup, no rules at all)
 
     def __post_init__(self):            # hard rules can't be loosened by settings
@@ -101,7 +103,8 @@ class Rules:
                    int(for_type(slate_type, "game_max")), int(for_type(slate_type, "max_vs_own_dst")),
                    int(get("build.min_salary")), int(for_type(slate_type, "rb_per_team")),
                    int(get("rules.no_qb_team_max")), int(for_type(slate_type, "qb_own_rb")),
-                   float(get("rules.rb_min_tgt")), int(get("rules.max_rb_runback")))
+                   float(get("rules.rb_min_tgt")), int(get("rules.max_rb_runback")),
+                   int(get("rules.max_cheap_per_lineup")), float(get("rules.cheap_salary")))
 
 
 def violations(lu, P: Pool, rules: Rules | None = None) -> list[str]:
@@ -144,6 +147,8 @@ def violations(lu, P: Pool, rules: Rules | None = None) -> list[str]:
         if sum(1 for i in lu if P.team[i] == t and P.pos[i] in ("RB", "WR", "TE")) > rules.no_qb_team_max:
             out.append("skill players without their QB")
             break
+    if sum(1 for i in lu if P.pos[i] in ("QB", "RB", "WR") and P.sal[i] <= rules.cheap_salary) > rules.max_cheap:
+        out.append("too many cheap QB/RB/WR")
     if sum(1 for i in rbs if P.team[i] == P.opp[q]) > rules.max_rb_runback:
         out.append("RB run-back")
     own_rb = [i for i in rbs if P.team[i] == P.team[q]]
@@ -227,6 +232,9 @@ class Optimizer:
             add(np.r_[m, e2], 0, np.inf)          # y_g <= players in g
             add(np.r_[m, z], 0, rules.game_max)
         add(np.r_[np.zeros(n), np.ones(G)], 2, np.inf)   # 2+ games
+        if rules.max_cheap < ROSTER:                    # Kenny 11/08: at most N cheap QB/RB/WR per lineup
+            ch = (np.isin(P.pos, ["QB", "RB", "WR"]) & (P.sal <= rules.cheap_salary)).astype(float)
+            add(np.r_[ch, z], 0, rules.max_cheap)
         pc = np.isin(P.pos, ["WR", "TE"])
         skill = np.isin(P.pos, ["RB", "WR", "TE"])
         M = 8
