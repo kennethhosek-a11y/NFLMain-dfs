@@ -517,7 +517,7 @@ def build(p: Projections, contests: list[Contest], n_sims: int | None = None, n_
     dupe, scA, scB = score_all(lus)
     stk = stack_team(lus, pool)
     pos_all = pool["pos"].to_numpy(object)
-    ext = Extra.from_settings(pos_all, L.shapes(lus, P))
+    ext = Extra.from_settings(pos_all, L.shapes(lus, P), P.sal)
     picks, plan, rows = {}, [], []
     used: set[int] = set()
     for c in contests:
@@ -548,7 +548,7 @@ def build(p: Projections, contests: list[Contest], n_sims: int | None = None, n_
                         lus = np.vstack([lus, new])               # append: earlier indices stay valid
                         dupe, scA, scB = score_all(lus)
                         stk = stack_team(lus, pool)
-                        ext = Extra.from_settings(pos_all, L.shapes(lus, P))
+                        ext = Extra.from_settings(pos_all, L.shapes(lus, P), P.sal)
                         mA = evaluate(scA, fld, fpA, c, dupe)
                 inside = np.isin(lus, U).all(axis=1)
                 outside = set(np.flatnonzero(~inside).tolist())

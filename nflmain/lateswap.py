@@ -226,7 +226,7 @@ def _marginal(top1: np.ndarray, eo: list, has_cur: list) -> np.ndarray:
     return out
 
 
-def choose(entry_opts, scores, swappable, n_players, max_exposure, keep_bonus=1e-4, pos=None):
+def choose(entry_opts, scores, swappable, n_players, max_exposure, keep_bonus=1e-4, pos=None, sal=None):
     """One option per entry maximizing the summed objective, each swappable player in at most
     max_exposure of entries (locked players aren't counted - they can't move), and never the same
     lineup in two entries (Kenny's rule)."""
@@ -248,6 +248,9 @@ def choose(entry_opts, scores, swappable, n_players, max_exposure, keep_bonus=1e
     if pos is not None:                       # workbook M15: QB / DST exposure caps
         for p_, key in (("QB", "rules.qb_max_exposure"), ("DST", "rules.dst_max_exposure")):
             capv[pos == p_] = np.minimum(cap, max(1, int(np.floor(float(S(key)) * E + 1e-9))))
+    if sal is not None:                       # Kenny 11/08: players at or under $4,500 at most 30%
+        cheap = np.asarray(sal) <= float(S("rules.cheap_salary"))
+        capv[cheap] = np.minimum(capv[cheap], max(1, int(np.floor(float(S("rules.cheap_max_exposure")) * E + 1e-9))))
     cons = [LinearConstraint(A1, 1, 1)]
     if ps and E >= 2:
         cons.append(LinearConstraint(cnt[ps], 0, capv[ps]))
@@ -338,7 +341,7 @@ def reevaluate(pool: pd.DataFrame, fpA: np.ndarray, fpB: np.ndarray, currents: l
         sig = significant(eo, perA, perB, forced, margin, z, n_test)
         kept = [[eo[i][j] for j, _ in s] for i, s in enumerate(sig)]
         sc = [[v for _, v in s] for s in sig]
-        pick = choose(kept, sc, ~locked, len(pool), float(S("portfolio.max_exposure")), pos=P.pos)
+        pick = choose(kept, sc, ~locked, len(pool), float(S("portfolio.max_exposure")), pos=P.pos, sal=P.sal)
         names, ownr = pool["Name"].to_numpy(object), own
         for i, k in enumerate(ent):
             new = kept[i][pick[i]]

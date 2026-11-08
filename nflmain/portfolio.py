@@ -25,15 +25,18 @@ class Extra:
     ~50%, M4 one bring-back ~50%, M11 TE in FLEX <= 10%) and lineups differing by 2+ (M16).
     pos: position of every player (by pool index); props: {name: bool per candidate}."""
 
-    def __init__(self, pos=None, props=None, bands=None, pos_caps=None, min_unique=None):
+    def __init__(self, pos=None, props=None, bands=None, pos_caps=None, min_unique=None, sal=None,
+                 cheap=None):
         self.pos = pos
+        self.sal = sal                         # salaries by pool index (for the cheap-player cap)
+        self.cheap = cheap                     # (salary at or under, max share) or None
         self.props = props or {}
         self.bands = bands or {}               # name -> (low share, high share)
         self.pos_caps = pos_caps or {}         # position -> max share
         self.min_unique = int(S("rules.min_unique")) if min_unique is None else min_unique
 
     @classmethod
-    def from_settings(cls, pos, props):
+    def from_settings(cls, pos, props, sal=None):
         b = float(S("rules.share_band"))
         bands = {}
         for name, key in (("double", "rules.double_stack_share"), ("bringback", "rules.bringback_share")):
@@ -43,7 +46,8 @@ class Extra:
         bands["te_flex"] = (0.0, float(S("rules.flex_te_max")))
         bands["rb_flex"] = (0.0, float(S("rules.flex_rb_max")))
         caps_ = {"QB": float(S("rules.qb_max_exposure")), "DST": float(S("rules.dst_max_exposure"))}
-        return cls(pos, props, bands, caps_)
+        cheap = (float(S("rules.cheap_salary")), float(S("rules.cheap_max_exposure")))
+        return cls(pos, props, bands, caps_, sal=sal, cheap=cheap)
 
     def player_caps(self, n: int, k_min: int, P: int) -> np.ndarray:
         """Most lineups (of n) each player may be in: the 50% cap, tighter for QB / DST, never below
@@ -54,6 +58,9 @@ class Extra:
             for p_, frac in self.pos_caps.items():
                 m = np.flatnonzero(self.pos[:P] == p_)
                 cap[m] = np.minimum(cap[m], max(floor_, int(np.floor(frac * n + 1e-9))))
+        if self.sal is not None and self.cheap is not None:   # Kenny 11/08: cheap players are boom-or-bust
+            m = np.flatnonzero(np.asarray(self.sal[:P]) <= self.cheap[0])
+            cap[m] = np.minimum(cap[m], max(floor_, int(np.floor(self.cheap[1] * n + 1e-9))))
         return cap
 
     def band_counts(self, n: int) -> dict:
@@ -62,7 +69,7 @@ class Extra:
 
     def without_bands(self, keep=()):
         return Extra(self.pos, self.props, {k: v for k, v in self.bands.items() if k in keep},
-                     self.pos_caps, self.min_unique)
+                     self.pos_caps, self.min_unique, self.sal, self.cheap)
 
 
 NO_EXTRA = Extra(min_unique=2)
