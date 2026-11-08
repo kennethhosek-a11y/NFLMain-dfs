@@ -9,3 +9,4 @@ research/prep/out/
 *.key
 DKEntries*.csv
 !tests/**/*.csv
+data/cache
