@@ -1,0 +1,5 @@
+# Kenny's "from now on" settings (keys and safe ranges: config/settings.yaml)
+# 11/08/2026: turn on workbook rule M15 (QB max 25%, DST max 15% of lineups), Kenny's call after
+# seeing 46% Cousins / 50% Saints in the mini-MAX.
+rules.qb_max_exposure: 0.25
+rules.dst_max_exposure: 0.15
