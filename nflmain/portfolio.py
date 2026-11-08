@@ -329,7 +329,7 @@ def select(metrics, lus, n, large, exclude=(), initial=True, stack=None, quiet=F
             # the FLEX limits (RB / TE in FLEX), then drop those too
             ex_list = [extra] if extra is None else [extra, extra.without_bands(("rb_flex", "te_flex", "cheap2", "risk0", "risk5", "risk12")),
                                                      extra.without_bands(("rb_flex", "te_flex", "cheap2")),
-                                                     extra.without_bands()]
+                                                     extra.without_bands(("cheap2",))]   # Kenny 11/08: the 2-cheap limit is never dropped
             if extra is not None and (extra.own is not None or extra.bust is not None):
                 # last resorts, never leave entries empty: drop the leverage cap, then the bust-scaled
                 # cheap cap (the 50%, QB / DST and flat cheap caps always stay)
