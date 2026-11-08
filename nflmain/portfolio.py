@@ -19,6 +19,53 @@ from .settings import get as S
 MIN_COUNT_ENTRIES = 10
 
 
+class Extra:
+    """Kenny's workbook portfolio rules for one candidate set (lineups.py has the lineup rules):
+    per-position exposure caps (M15: QB 25%, DST 15%), shares of lineup shapes (M1 double stacks
+    ~50%, M4 one bring-back ~50%, M11 TE in FLEX <= 10%) and lineups differing by 2+ (M16).
+    pos: position of every player (by pool index); props: {name: bool per candidate}."""
+
+    def __init__(self, pos=None, props=None, bands=None, pos_caps=None, min_unique=None):
+        self.pos = pos
+        self.props = props or {}
+        self.bands = bands or {}               # name -> (low share, high share)
+        self.pos_caps = pos_caps or {}         # position -> max share
+        self.min_unique = int(S("rules.min_unique")) if min_unique is None else min_unique
+
+    @classmethod
+    def from_settings(cls, pos, props):
+        b = float(S("rules.share_band"))
+        bands = {}
+        for name, key in (("double", "rules.double_stack_share"), ("bringback", "rules.bringback_share")):
+            t = float(S(key))
+            if b < 1.0:
+                bands[name] = (max(t - b, 0.0), min(t + b, 1.0))
+        bands["te_flex"] = (0.0, float(S("rules.flex_te_max")))
+        caps_ = {"QB": float(S("rules.qb_max_exposure")), "DST": float(S("rules.dst_max_exposure"))}
+        return cls(pos, props, bands, caps_)
+
+    def player_caps(self, n: int, k_min: int, P: int) -> np.ndarray:
+        """Most lineups (of n) each player may be in: the 50% cap, tighter for QB / DST, never below
+        the 0-or-5+ minimum (so a QB/DST cap can't make the 0-or-5+ rule impossible)."""
+        cap = np.full(P, caps(n))
+        floor_ = max(k_min, min_count(n, True), 2)      # never below the 0-or-5+ minimum, nor 2
+        if self.pos is not None:
+            for p_, frac in self.pos_caps.items():
+                m = np.flatnonzero(self.pos[:P] == p_)
+                cap[m] = np.minimum(cap[m], max(floor_, int(np.floor(frac * n + 1e-9))))
+        return cap
+
+    def band_counts(self, n: int) -> dict:
+        return {k: (int(np.ceil(lo * n - 1e-9)), int(np.floor(hi * n + 1e-9))) for k, (lo, hi) in self.bands.items()
+                if k in self.props}
+
+    def without_bands(self):
+        return Extra(self.pos, self.props, {}, self.pos_caps, self.min_unique)
+
+
+NO_EXTRA = Extra(min_unique=2)
+
+
 def _w() -> float:
     return float(S("portfolio.top1_weight"))
 
@@ -52,13 +99,22 @@ def meets_min_count(idx, lus, n, initial=True) -> bool:
     return bool((cnt[cnt > 0] >= k).all())
 
 
-def _ok(j, chosen, lus, cap, stack=None):
+def _ok(j, chosen, lus, cap, stack=None, extra=None, n=None):
+    """Can lineup j join `chosen` without breaking a cap? (cap: int or per-player array)"""
     if chosen:
         cnt = np.bincount(lus[chosen].ravel(), minlength=lus.max() + 1)
-        if any(cnt[p] + 1 > cap for p in lus[j]):
+        capv = np.broadcast_to(np.asarray(cap), (lus.max() + 1,)) if np.ndim(cap) else np.full(lus.max() + 1, cap)
+        if any(cnt[p] + 1 > capv[p] for p in lus[j]):
             return False
-        if stack is not None and sum(stack[c] == stack[j] for c in chosen) + 1 > cap:
+        if stack is not None and sum(stack[c] == stack[j] for c in chosen) + 1 > np.max(capv):
             return False
+        if extra is not None:
+            mu = extra.min_unique
+            if mu > 1 and any(len(set(lus[j]) & set(lus[c])) > lus.shape[1] - mu for c in chosen):
+                return False
+            for k, (lo, hi) in extra.band_counts(n or len(chosen) + 1).items():
+                if extra.props[k][j] and sum(extra.props[k][c] for c in chosen) + 1 > hi:
+                    return False
     return True
 
 
@@ -108,8 +164,8 @@ def exact(metrics, lus, n, large, exclude=(), initial=True, stack=None, time_lim
     return [int(j) for j in x[np.argsort(-val[x])]] if len(x) == n else []
 
 
-def greedy(metrics, lus, n, large, exclude=(), stack=None) -> list[int]:
-    cap = caps(n)
+def greedy(metrics, lus, n, large, exclude=(), stack=None, extra=None) -> list[int]:
+    cap = extra.player_caps(n, 1, int(lus.max()) + 1) if extra is not None else caps(n)
     chosen: list[int] = []
     any_hit = np.zeros(metrics["top1"].shape[1], dtype=bool)
     rate = metrics["top1"].mean(axis=1)
@@ -119,7 +175,7 @@ def greedy(metrics, lus, n, large, exclude=(), stack=None) -> list[int]:
         gain = (metrics["top1"] & ~any_hit).mean(axis=1) + _w() * rate / n if large else small
         pick = None
         for j in np.argsort(-gain):
-            if j not in banned and j not in chosen and _ok(int(j), chosen, lus, cap, stack):
+            if j not in banned and j not in chosen and _ok(int(j), chosen, lus, cap, stack, extra, n):
                 pick = int(j)
                 break
         if pick is None:
@@ -129,15 +185,15 @@ def greedy(metrics, lus, n, large, exclude=(), stack=None) -> list[int]:
     return chosen
 
 
-def joint(metrics, lus, n, large, exclude=(), k_min=1, stack=None, pool=700, min_unique=2,
-          time_limit=90, cover_sims=1500) -> list[int]:
+def joint(metrics, lus, n, large, exclude=(), k_min=1, stack=None, pool=700, min_unique=None,
+          time_limit=90, cover_sims=1500, extra=None) -> list[int]:
     """(NBA pick_portfolio_milp, adapted.) Choose all n lineups at once from the best `pool`
     candidates: every player unused or in >= k_min lineups, none above the exposure cap, each QB
     stack team at most the cap, lineups differ by >= min_unique players. Large fields maximize
     P(at least one lineup top 1%) + top1_weight x average top-1% rate over `cover_sims` simulated
     slates; small fields the summed stand-alone value. [] if infeasible."""
     from scipy.optimize import Bounds, LinearConstraint, milp
-    from scipy.sparse import coo_matrix, csr_matrix, hstack, identity
+    from scipy.sparse import coo_matrix, csr_matrix, diags, hstack, identity
     val = _value(metrics, large, n)
     order = [j for j in np.argsort(-val) if j not in set(exclude)][:pool]
     top = np.array(order)
@@ -148,7 +204,10 @@ def joint(metrics, lus, n, large, exclude=(), k_min=1, stack=None, pool=700, min
     players = np.unique(Cn)
     Pn = len(players)
     pidx = {p: i for i, p in enumerate(players)}
+    extra = extra or NO_EXTRA
+    min_unique = extra.min_unique if min_unique is None else min_unique
     cap = max(k_min, caps(n))
+    capv = extra.player_caps(n, k_min, int(lus.max()) + 1)[players]
     rows = np.array([pidx[p] for lu in Cn for p in lu])
     M = coo_matrix((np.ones(len(rows)), (rows, np.repeat(np.arange(K), Cn.shape[1]))), shape=(Pn, K)).tocsr()
     Sn = 0
@@ -161,13 +220,16 @@ def joint(metrics, lus, n, large, exclude=(), k_min=1, stack=None, pool=700, min
     nv = K + Pn + Sn
     Z = lambda r, c: csr_matrix((r, c))
     cons = [LinearConstraint(hstack([csr_matrix(np.ones((1, K))), Z(1, Pn + Sn)]).tocsr(), n, n),
-            LinearConstraint(hstack([M, -cap * identity(Pn), Z(Pn, Sn)]).tocsr(), -np.inf, 0),
+            LinearConstraint(hstack([M, -diags(capv.astype(float)), Z(Pn, Sn)]).tocsr(), -np.inf, 0),
             LinearConstraint(hstack([M, -k_min * identity(Pn), Z(Pn, Sn)]).tocsr(), 0, np.inf)]
     if stack is not None:
         st = np.array([stack[j] for j in top], dtype=object)
         kinds = sorted(set(st))
         A = coo_matrix((np.ones(K), ([kinds.index(s) for s in st], np.arange(K))), shape=(len(kinds), K))
         cons.append(LinearConstraint(hstack([A, Z(len(kinds), Pn + Sn)]).tocsr(), 0, cap))
+    for k, (lo_c, hi_c) in extra.band_counts(n).items():          # shape shares (M1, M4, M11)
+        row = np.asarray(extra.props[k])[top].astype(float)
+        cons.append(LinearConstraint(hstack([csr_matrix(row[None, :]), Z(1, Pn + Sn)]).tocsr(), lo_c, hi_c))
     if min_unique > 1:
         shared = (M.T @ M).toarray()
         ii, jj = np.nonzero(np.triu(shared > Cn.shape[1] - min_unique, k=1))
@@ -191,37 +253,42 @@ def joint(metrics, lus, n, large, exclude=(), k_min=1, stack=None, pool=700, min
     return [int(top[j]) for j in x[np.argsort(-val[top][x])]] if len(x) == n else []
 
 
-def select(metrics, lus, n, large, exclude=(), initial=True, stack=None, quiet=False, time_limit=20) -> list[int]:
+def select(metrics, lus, n, large, exclude=(), initial=True, stack=None, quiet=False, time_limit=20,
+           extra=None) -> list[int]:
     """Whole-portfolio MILP first (0-or-5+ on the initial build, 50% cap, stack-team cap); if the
     0-or-5+ rule can't be met from these candidates it steps down (5 -> 3 -> off) and says so.
     Greedy picker as the last resort."""
     k0 = min_count(n, initial)
     if n >= 2:
         for k in sorted({k0, min(k0, 3), 1}, reverse=True):
-            for st in ((stack, None) if stack is not None else (None,)):
-                ch = joint(metrics, lus, n, large, exclude, k, st, time_limit=time_limit)
-                if ch:
-                    if k < k0 and not quiet:
-                        print(f"[portfolio] the 0-or-{k0}+ rule couldn't be met from these candidates; used 0-or-{k}+")
-                    return ch
-    ch = greedy(metrics, lus, n, large, exclude, stack)
+            ex_list = [extra] if extra is None else [extra, extra.without_bands()]
+            for ex in ex_list:
+                for st in ((stack, None) if stack is not None else (None,)):
+                    ch = joint(metrics, lus, n, large, exclude, k, st, time_limit=time_limit, extra=ex)
+                    if ch:
+                        if k < k0 and not quiet:
+                            print(f"[portfolio] the 0-or-{k0}+ rule couldn't be met from these candidates; used 0-or-{k}+")
+                        if extra is not None and ex is not extra and not quiet:
+                            print("[portfolio] the workbook's lineup-shape shares couldn't all be met; picked without them")
+                        return ch
+    ch = greedy(metrics, lus, n, large, exclude, stack, extra)
     if not meets_min_count(ch, lus, n, initial):
         ch = []
     ex = exact(metrics, lus, n, large, exclude, initial, stack) if n >= 2 else []
     if ex and (len(ch) < n or per_sim_value(metrics, ex, large).mean() > per_sim_value(metrics, ch, large).mean()):
         return ex
     if len(ch) < n and stack is not None:          # relax the stack-team cap before anything else
-        return select(metrics, lus, n, large, exclude, initial, None, quiet)
+        return select(metrics, lus, n, large, exclude, initial, None, quiet, time_limit, extra)
     if len(ch) < n and not quiet:
         print(f"[portfolio] only {len(ch)} lineups fit the exposure caps")
     return ch
 
 
-def confirm_swaps(chosen, mA, mB, lus, large, exclude=(), initial=True, stack=None):
+def confirm_swaps(chosen, mA, mB, lus, large, exclude=(), initial=True, stack=None, extra=None):
     """Try replacing each lineup with the best alternative on sims A; keep it only if it also wins
     on independent sims B by > swap_z standard errors (paired over the same simulated slates)."""
     n = len(chosen)
-    cap = caps(n)
+    cap = extra.player_caps(n, min_count(n, initial), int(lus.max()) + 1) if extra is not None else caps(n)
     z = float(S("portfolio.swap_z"))
     tries = int(S("portfolio.swap_tries"))
     log, cur = [], list(chosen)
@@ -235,9 +302,12 @@ def confirm_swaps(chosen, mA, mB, lus, large, exclude=(), initial=True, stack=No
             g = mA["cash"].mean(axis=1) + _small_w() * mA["beat"].mean(axis=1)
         for j in np.argsort(-g)[:tries]:
             j = int(j)
-            if j in cur or j in exclude or not _ok(j, others, lus, cap, stack):
+            if j in cur or j in exclude or not _ok(j, others, lus, cap, stack, extra, n):
                 continue
             trial = others[:slot] + [j] + others[slot:]
+            if extra is not None and any(sum(extra.props[k][t] for t in trial) < min(lo, sum(extra.props[k][t] for t in cur))
+                                         for k, (lo, hi) in extra.band_counts(n).items()):
+                continue
             if not meets_min_count(trial, lus, n, initial):
                 continue
             if per_sim_value(mA, trial, large).mean() <= base_a + 1e-12:

@@ -226,7 +226,7 @@ def _marginal(top1: np.ndarray, eo: list, has_cur: list) -> np.ndarray:
     return out
 
 
-def choose(entry_opts, scores, swappable, n_players, max_exposure, keep_bonus=1e-4):
+def choose(entry_opts, scores, swappable, n_players, max_exposure, keep_bonus=1e-4, pos=None):
     """One option per entry maximizing the summed objective, each swappable player in at most
     max_exposure of entries (locked players aren't counted - they can't move), and never the same
     lineup in two entries (Kenny's rule)."""
@@ -244,9 +244,13 @@ def choose(entry_opts, scores, swappable, n_players, max_exposure, keep_bonus=1e
             cnt[p, k] += 1
     ps = [p for p in range(n_players) if swappable[p] and cnt[p].any()]
     cap = max(1, int(np.floor(max_exposure * E + 1e-9)))
+    capv = np.full(n_players, cap)
+    if pos is not None:                       # workbook M15: QB / DST exposure caps
+        for p_, key in (("QB", "rules.qb_max_exposure"), ("DST", "rules.dst_max_exposure")):
+            capv[pos == p_] = np.minimum(cap, max(1, int(np.floor(float(S(key)) * E + 1e-9))))
     cons = [LinearConstraint(A1, 1, 1)]
     if ps and E >= 2:
-        cons.append(LinearConstraint(cnt[ps], 0, cap))
+        cons.append(LinearConstraint(cnt[ps], 0, capv[ps]))
     by_key: dict = {}
     for k, (e, o) in enumerate(flat):
         by_key.setdefault(tuple(sorted(entry_opts[e][o])), set()).add((e, k))
@@ -291,8 +295,8 @@ def reevaluate(pool: pd.DataFrame, fpA: np.ndarray, fpB: np.ndarray, currents: l
     ctx = dict(sal=P.sal, pos=P.pos, team=P.team, game=P.game, opp=P.opp, locked=locked,
                elig=eligibility(P.pos), proj=proj, ceil=np.percentile(fpA, 85, axis=1).astype(np.float32),
                fp=fpA[:, :min(fpA.shape[1], 2000)], allow=allow & ~dead, max_per_team=rules.max_per_team,
-               game_max=rules.game_max, max_vs_own_dst=0 if rules.no_offense_vs_dst else 8, rb_per_team=3,
-               min_salary=int(S("build.min_salary")),
+               game_max=rules.game_max, max_vs_own_dst=rules.max_vs_own_dst, rb_per_team=rules.rb_per_team,
+               min_salary=rules.min_salary,
                # before the first lock every spot is open (a full rebuild per entry): half the options
                # keeps the check under 3 minutes for 190 entries; after a lock few spots are open
                n_opts=int(S("lateswap.options")) if locked.any() else max(10, int(S("lateswap.options")) // 2))
@@ -334,12 +338,12 @@ def reevaluate(pool: pd.DataFrame, fpA: np.ndarray, fpB: np.ndarray, currents: l
         sig = significant(eo, perA, perB, forced, margin, z, n_test)
         kept = [[eo[i][j] for j, _ in s] for i, s in enumerate(sig)]
         sc = [[v for _, v in s] for s in sig]
-        pick = choose(kept, sc, ~locked, len(pool), float(S("portfolio.max_exposure")))
+        pick = choose(kept, sc, ~locked, len(pool), float(S("portfolio.max_exposure")), pos=P.pos)
         names, ownr = pool["Name"].to_numpy(object), own
         for i, k in enumerate(ent):
             new = kept[i][pick[i]]
             old = currents[k]
-            if old is not None and not _legal(new, P, ctx):          # safety net: never worse than now
+            if old is not None and sorted(new) != sorted(old) and not _legal(new, P, ctx):   # safety net
                 print(f"[lateswap] entry {k}: the new lineup broke a rule - kept the current one")
                 new = old
             taken.add(tuple(sorted(new)))

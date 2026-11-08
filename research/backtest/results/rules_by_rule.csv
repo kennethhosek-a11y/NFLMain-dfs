@@ -1,0 +1,18 @@
+rule,id,evidence,slates,real best lineup follows it,pts lost forcing it,all: best vs ref (pts of %),all: best SE,all: 3rd best vs ref (pts of %),all: 3rd best SE,2026: best vs ref (pts of %),2026: best SE,2026: 3rd best vs ref (pts of %),2026: 3rd best SE,verdict
+M11 TE in FLEX at most 10%,M11,Moderate,294,86.0,0.0,0.39,0.17,-0.01,0.1,0.74,0.82,0.32,0.28,helps
+"M15 QB max 25%, DST max 15%",M15,Opinion,294,,0.0,-1.48,0.25,-2.47,0.26,-0.92,0.52,-2.66,0.92,hurts
+M16 lineups differ by 2+ players,M16,Opinion,294,,0.0,0.0,0.0,-0.01,0.01,0.0,0.0,0.0,0.0,held up (no harm)
+M16 lineups differ by 3+ players,M16,Opinion,294,,0.0,0.12,0.05,0.04,0.05,0.52,0.39,0.2,0.13,helps
+M4 ~50% of lineups with exactly 1 bring-back,M4,Moderate,294,35.0,0.0,0.41,0.18,0.26,0.12,0.37,0.38,0.54,0.59,helps
+M6 at most 1 hitter vs own DST,M6,Opinion,294,95.0,0.2,0.08,0.11,0.01,0.07,0.19,0.14,-0.04,0.12,held up (no harm)
+M6 none vs own DST (old rule),M6,Opinion,294,72.0,1.3,0.23,0.19,-0.09,0.14,-0.29,0.59,-0.28,0.44,held up (no harm)
+M7 QB + own RB only if receiver,M7,Moderate,294,85.0,0.7,0.15,0.17,0.01,0.17,-0.04,0.29,0.84,0.75,held up (no harm)
+M8 all three team limits,M8,Opinion,294,89.0,0.4,0.55,0.17,0.02,0.13,0.84,0.67,0.11,0.46,helps
+M8 max 1 RB per team,M8,Opinion,294,96.0,0.2,0.33,0.1,0.04,0.08,0.74,0.51,0.13,0.26,helps
+M8 max 2 from a team without its QB,M8,Opinion,294,91.0,0.2,0.38,0.17,-0.11,0.13,0.43,0.49,0.39,0.6,helps
+M8 max 4 per team,M8,Opinion,294,100.0,0.0,0.06,0.04,-0.0,0.03,0.0,0.0,0.0,0.0,held up (no harm)
+M9 stacks ONLY from the 2 highest-total games (what M9 warns against),M9,Moderate,294,43.0,5.8,0.31,0.27,0.0,0.21,1.53,0.88,0.2,0.82,held up (no harm)
+"SS1+SS2 short slates: 5 per team, 2 RBs, QB+RB ok (vs M7+M8 on)",SS1/SS2,Opinion,99,40.0,-2.4,-0.39,0.47,-0.23,0.36,0.02,1.22,-0.09,0.77,held up (no harm)
+SS3 short slates: up to 2 hitters vs own DST (vs M6),SS3,Opinion,99,8.0,-0.7,-0.21,0.37,0.15,0.27,-0.85,1.27,0.44,0.98,held up (no harm)
+"SS4 short slates: $48,500 floor (vs $49,500)",SS4,Opinion,99,70.0,-2.6,0.43,0.52,-0.07,0.33,0.96,1.18,0.35,1.24,held up (no harm)
+SS5 short slates: exposure up to 60%,SS5,Opinion,99,,0.0,0.89,0.26,0.6,0.13,2.38,1.53,0.6,0.38,helps
