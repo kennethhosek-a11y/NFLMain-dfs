@@ -41,6 +41,13 @@ player**. Live scores condition the sims for games already played.
 ## Schedule
 
 ### Tuesday (once DK posts the next Sunday's salaries, usually Monday night or Tuesday)
+- **History database: add last week.** Run `python -m research.history.build_db --season 2026`.
+  - It adds the week just finished: stats, DK points, closing lines, slate tags, and the real DK
+    salaries saved from last week's runs.
+  - Check that the printed "last completed week" moved up by one.
+  - Commit and push `data/research/history/` with the other data.
+  - Every few weeks, re-run `python -m research.backtest.slate_size gate` and `portfolio` (2026
+    weeks count triple). Tell Kenny if a setting should move. Changing a default is a pull request.
 - `python -m nflmain slates` to get the slate shape: which slates, how many games, lock times.
 - Run the workbook for each slate Kenny usually plays, then send it at the end of the reply.
 - Summarize:

@@ -1,0 +1,10 @@
+check,n,mean_abs_diff,share_within_0.1,corr
+"DK points: ours vs RotoGuru (DST, 2021)",544,0.327,0.875,
+"DK points: ours vs RotoGuru (QB, 2021)",655,0.0,0.998,
+"DK points: ours vs RotoGuru (RB, 2021)",1606,0.0,1.0,
+"DK points: ours vs RotoGuru (TE, 2021)",1185,0.0,1.0,
+"DK points: ours vs RotoGuru (WR, 2021)",2384,0.005,0.999,
+"synthetic vs real salary (QB, 2021)",655,603.0,,0.729
+"synthetic vs real salary (RB, 2021)",1606,503.0,,0.779
+"synthetic vs real salary (TE, 2021)",1185,468.0,,0.788
+"synthetic vs real salary (WR, 2021)",2384,571.0,,0.833
