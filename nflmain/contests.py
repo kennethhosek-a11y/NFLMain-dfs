@@ -77,15 +77,19 @@ def details(contest_id: str) -> dict:
 
 def lobby_info(cid: str) -> dict | None:
     """Size, fee and prize pool from the DK lobby (no payout table) - fallback when the
-    contest-details API refuses this machine."""
+    contest-details API refuses this machine. Saved to data/contests_meta/<id>_lobby.json whenever
+    seen, because DK drops a contest from the lobby once it's full (it stays playable)."""
+    f = META / f"{cid}_lobby.json"
     try:
         from .slate import lobby
         for c in lobby().get("Contests", []):
             if str(c.get("id")) == str(cid):
+                META.mkdir(parents=True, exist_ok=True)
+                f.write_text(json.dumps({k: c.get(k) for k in ("id", "n", "a", "m", "mec", "po", "dg")}))
                 return c
     except Exception:  # noqa: BLE001
-        return None
-    return None
+        pass
+    return json.loads(f.read_text()) if f.exists() else None
 
 
 def contest_from_id(cid: str, entry_ids=None) -> Contest:

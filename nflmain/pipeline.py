@@ -463,6 +463,52 @@ def build(p: Projections, contests: list[Contest], n_sims: int | None = None, n_
     rng = np.random.default_rng(seed)
     t0 = datetime.now()
     lus = candidates(p, pool, fpA, rules, allow, n_worlds, rng, n_neighbors=max(40, min(big_n, 150)))
+    # Kenny 11/08 "inside-out": a few safe lineups (every player at or below his position's usual bust
+    # rate), then more risk step by step, then the top-1% chase. Bust = under 2x salary in the sims.
+    inside_out = bool(int(S("rules.inside_out")))
+    sal_k = pool["Salary"].to_numpy(float) / 1000
+    bust = (fpA < 2.0 * sal_k[:, None]).mean(axis=1)
+    playable = fpA.mean(axis=1) > 5
+    pos_arr = pool["pos"].to_numpy(object)
+    med = {q: float(np.median(bust[(pos_arr == q) & playable])) if ((pos_arr == q) & playable).any() else 1.0
+           for q in ("QB", "RB", "WR", "TE", "DST")}
+    # risk = where a player's bust rate ranks within his position (0 = safest, 1 = riskiest),
+    # among playable players; tiers: safest third, safer half, safer two-thirds
+    rel_risk = np.ones(len(pool))
+    for q in ("QB", "RB", "WR", "TE", "DST"):
+        m = (pos_arr == q) & playable
+        if m.any():
+            ref = np.sort(bust[m])
+            rel_risk[pos_arr == q] = np.searchsorted(ref, bust[pos_arr == q], side="right") / len(ref)
+    TIERS = (0.34, 0.5, 0.67)
+    if inside_out:
+        P0 = L.Pool.from_df(pool)
+        proj0 = fpA.mean(axis=1)
+        p25 = np.percentile(fpA, 25, axis=1)
+        ceil0 = np.percentile(fpA, 85, axis=1)
+        qbs = np.flatnonzero((pos_arr == "QB") & (proj0 > 12))
+        tjobs = []
+        for thr in TIERS:
+            elig_t = ((proj0 > 0.3) & allow & (rel_risk <= thr)).astype(float)
+            pts = 0.5 * (proj0 + p25) if thr == TIERS[0] else 0.5 * (proj0 + ceil0)
+            for q in qbs:
+                if rel_risk[q] <= thr:
+                    tjobs.append((elig_t, pts, {"team": pool["team"].values[q]}))
+                    tjobs.append((elig_t, pts * rng.lognormal(0, 0.1, len(pts)), {"team": pool["team"].values[q], "rb_max": 2}))
+            for s in rng.choice(fpA.shape[1], size=40, replace=False):
+                tjobs.append((elig_t, 0.5 * pts + 0.5 * fpA[:, s], {}))
+        by_elig: dict = {}
+        for elig_t, pts, kw in tjobs:
+            by_elig.setdefault(elig_t.tobytes(), (elig_t, []))[1].append((pts, kw))
+        added = []
+        for elig_t, jobs_t in by_elig.values():
+            added += solve_many(P0, rules, elig_t, jobs_t)
+        if added:
+            lus = np.unique(np.vstack([lus, L.canon(np.array(added))]), axis=0)
+        print(f"[build] inside-out: {len(added)} lower-risk candidate builds (position bust medians "
+              + ", ".join(f"{q} {100 * v:.0f}%" for q, v in med.items()) + ")")
+        safe_names = pool.loc[(rel_risk <= TIERS[0]) & playable, "Name"].tolist()
+        print(f"[build] safest third by position: {', '.join(safe_names[:40])}")
     print(f"[build] {len(lus)} candidate lineups ({(datetime.now() - t0).seconds}s)")
     P = L.Pool.from_df(pool)
     own = pool["Ownership"].to_numpy(float)
@@ -522,12 +568,27 @@ def build(p: Projections, contests: list[Contest], n_sims: int | None = None, n_
     def make_ext(lus_):
         e = Extra.from_settings(pos_all, L.shapes(lus_, P, float(S("rules.cheap_salary"))), P.sal)
         e.exceptions = exc
+        if inside_out:
+            worst = rel_risk[lus_].max(axis=1)
+            for name, thr in zip(("risk0", "risk5", "risk12"), TIERS):
+                e.props[name] = worst <= thr + 1e-9
         return e
+
+    def tier_bands(e, n):
+        """Lower bounds on the lowest-risk tiers for a contest of n entries (cumulative)."""
+        if not inside_out:
+            return
+        n_safe = max(2, int(round(n * 5 / 150)))
+        mid = float(S("rules.middle_share"))
+        e.bands["risk0"] = (min(n_safe / n, 1.0), min(max(2 * n_safe / n, 0.1), 1.0))   # about n_safe
+        e.bands["risk5"] = (min(max(n_safe / n, mid / 2), 1.0), 1.0)
+        e.bands["risk12"] = (min(max(n_safe / n, mid), 1.0), 1.0)
     ext = make_ext(lus)
     picks, plan, rows = {}, [], []
     used: set[int] = set()
     for c in contests:
         n = len(c.entry_ids) or 1
+        tier_bands(ext, n)
         mA = evaluate(scA, fld, fpA, c, dupe)
         k0 = min_count(n, True)
         t1 = datetime.now()
@@ -555,6 +616,7 @@ def build(p: Projections, contests: list[Contest], n_sims: int | None = None, n_
                         dupe, scA, scB = score_all(lus)
                         stk = stack_team(lus, pool)
                         ext = make_ext(lus)
+                        tier_bands(ext, n)
                         mA = evaluate(scA, fld, fpA, c, dupe)
                 inside = np.isin(lus, U).all(axis=1)
                 outside = set(np.flatnonzero(~inside).tolist())

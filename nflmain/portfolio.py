@@ -301,7 +301,8 @@ def select(metrics, lus, n, large, exclude=(), initial=True, stack=None, quiet=F
         for k in sorted({k0, min(k0, 3), 1}, reverse=True):
             # if every shape share can't be met: drop the double-stack / run-back targets first and keep
             # the FLEX limits (RB / TE in FLEX), then drop those too
-            ex_list = [extra] if extra is None else [extra, extra.without_bands(("rb_flex", "te_flex", "cheap2")),
+            ex_list = [extra] if extra is None else [extra, extra.without_bands(("rb_flex", "te_flex", "cheap2", "risk0", "risk5", "risk12")),
+                                                     extra.without_bands(("rb_flex", "te_flex", "cheap2")),
                                                      extra.without_bands()]
             for ex in ex_list:
                 for st in ((stack, None) if stack is not None else (None,)):
