@@ -9,3 +9,7 @@ research/prep/out/
 *.key
 DKEntries*.csv
 !tests/**/*.csv
+
+# Kenny's research workbooks are committed on purpose
+!research/ownership/*.xlsx
+data/cache

@@ -73,6 +73,29 @@ something, it tells Kenny to ask in the latest NFL Main chat.
   - Sportsbook props are an optional add-on that is **switched off**
     (`nflmain/project.py: PROPS_ENABLED = False`). Turning them on needs Kenny's OK.
 
+## Ownership model research (owner rule, 11/08/2026)
+`research/ownership/` holds Kenny's ownership research: the report
+`NFL_main_slate_ownership_projection.md` and the workbook
+`NFL_Ownership_Projection_Research_<date>.xlsx`. Read the newest workbook before any ownership work.
+- **The Recommendations sheet (#1-#15) is the plan for our ownership model.** Kenny's yellow
+  "Use? (Y/N)" and "Notes" columns win.
+  - Y = do it, N = don't.
+  - Blank = proposed. Ask Kenny before building it, except #1, which he started on 11/08/2026.
+- **Weak items are starting guesses**: the late-news damping numbers (#8), the wind flag (#14),
+  the uncertainty flag (#15), and the exact features in #5/#6. Fit them from our own DK contest
+  downloads and snapshots before relying on them. Say which numbers are still guesses.
+- **#1 is in force: save every DK contest download.** Every Sunday night (and by Wednesday at the
+  latest, since DK deletes them after 10 days), Kenny downloads the contest file for every
+  main-slate contest we entered, plus the Milly Maker, and uploads it to the weekly chat.
+  - Run `python -m nflmain results <files> --date <Sun date>` and commit `data/contests/`.
+  - The files sit behind Kenny's DK login, so Claude never signs in for him and never asks for
+    his password.
+  - The download only exists for contests he entered, so the Milly Maker needs at least one entry
+    from him.
+- A learned ownership model may replace the baseline only after it beats the baseline on
+  held-out weeks across about a full season (#7).
+- Never buy ownership data (FantasyLabs etc.); ask Kenny first if it seems worth it.
+
 ## Protect Kenny's other systems (NBA, NFL Showdown, UFC)
 - `kennethhosek-a11y/NBA-dfs`, `kennethhosek-a11y/NFL-dfs` (Showdown) and
   `kennethhosek-a11y/UFC--dfs` are **read-only**. Never modify them, push to them, merge into
