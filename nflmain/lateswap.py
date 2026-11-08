@@ -41,43 +41,88 @@ def locked_mask(pool: pd.DataFrame, now: datetime | None = None) -> np.ndarray:
     return out
 
 
-def _fill(points, open_slots, allowed, elig, sal, budget, team, game, opp, pos, team_room, game_room,
-          dst_team=None, no_vs_dst=True):
-    """Best players for the open slots (max points) among `allowed`, salary <= budget, team/game
-    room counting the locked players, never a hitter facing our DST."""
+def _fill(points, open_slots, allowed, ctx, keep, budget, floor, team_room, game_room):
+    """Best players for the open slots (max points) among `allowed`, with the locked players `keep`
+    counted: salary between the $49,500 floor and the cap, team/game room, RBs per team, the QB's
+    pass-catchers (1-2), never a DST facing our QB, at most max_vs_own_dst hitters facing our DST."""
     from scipy.optimize import Bounds, LinearConstraint, milp
+    elig, sal, team, game, opp, pos = ctx["elig"], ctx["sal"], ctx["team"], ctx["game"], ctx["opp"], ctx["pos"]
     players = np.flatnonzero(allowed)
     pairs = np.array([(i, s) for s in open_slots for i in players if elig[i, s]])
     if not len(pairs):
         return None
     m = len(pairs)
+    pi = pairs[:, 0]
     A, lo, hi = [], [], []
+
+    def add(row, l, h):
+        A.append(np.asarray(row, float)); lo.append(l); hi.append(h)
+
     for s in open_slots:
-        A.append((pairs[:, 1] == s).astype(float)); lo.append(1); hi.append(1)
-    for i in np.unique(pairs[:, 0]):
-        A.append((pairs[:, 0] == i).astype(float)); lo.append(0); hi.append(1)
-    A.append(sal[pairs[:, 0]].astype(float)); lo.append(0); hi.append(budget)
+        add(pairs[:, 1] == s, 1, 1)
+    for i in np.unique(pi):
+        add(pi == i, 0, 1)
+    add(sal[pi], max(floor, 0), budget)                            # M10 floor (hard) + cap
     for t, room in team_room.items():
-        row = (team[pairs[:, 0]] == t).astype(float)
-        if row.any():
-            A.append(row); lo.append(0); hi.append(max(room, 0))
+        if (team[pi] == t).any():
+            add(team[pi] == t, 0, max(room, 0))
     for g, room in game_room.items():
-        row = (game[pairs[:, 0]] == g).astype(float)
+        if (game[pi] == g).any():
+            add(game[pi] == g, 0, max(room, 0))
+    kp = list(keep)
+    skill = np.isin(pos[pi], ["RB", "WR", "TE"])
+    pc = np.isin(pos[pi], ["WR", "TE"])
+    M = 8
+    for t in set(team[pi]) | set(team[kp]):                          # M8: RBs per team
+        n_locked = sum(1 for i in kp if team[i] == t and pos[i] == "RB")
+        row = (team[pi] == t) & (pos[pi] == "RB")
         if row.any():
-            A.append(row); lo.append(0); hi.append(max(room, 0))
-    if no_vs_dst:
-        off = np.isin(pos[pairs[:, 0]], ["QB", "RB", "WR", "TE"])
-        if dst_team is not None:                       # locked DST: nobody facing it
-            row = (off & (opp[pairs[:, 0]] == dst_team)).astype(float)
-            if row.any():
-                A.append(row); lo.append(0); hi.append(0)
-        else:                                          # open DST: DST t and hitters facing t exclusive
-            for k in np.flatnonzero(pos[pairs[:, 0]] == "DST"):
-                t = team[pairs[k, 0]]
-                row = (off & (opp[pairs[:, 0]] == t)).astype(float)
-                row[k] = 8
-                A.append(row); lo.append(0); hi.append(8)
-    res = milp(-points[pairs[:, 0]].astype(float), constraints=[LinearConstraint(np.array(A), lo, hi)],
+            add(row, 0, max(ctx["rb_per_team"] - n_locked, 0))
+    qb_locked = [i for i in kp if pos[i] == "QB"]
+    dst_locked = [i for i in kp if pos[i] == "DST"]
+    if qb_locked:                                                     # M2 (hard): <= 2 pass-catchers
+        t = team[qb_locked[0]]
+        have = sum(1 for i in kp if team[i] == t and pos[i] in ("WR", "TE"))
+        row = pc & (team[pi] == t)
+        if row.any():
+            add(row, max(1 - have, 0), max(2 - have, 0))               # M1 (hard): >= 1
+        elif have < 1:
+            return None
+    else:                                                             # open QB: for each candidate QB
+        for k in np.flatnonzero(pos[pi] == "QB"):
+            t = team[pi[k]]
+            have = sum(1 for i in kp if team[i] == t and pos[i] in ("WR", "TE"))
+            row = (pc & (team[pi] == t)).astype(float)
+            r2 = row.copy(); r2[k] += M
+            add(r2, -np.inf, 2 - have + M)                            # <= 2 when this QB is used
+            r1 = row.copy(); r1[k] -= max(1 - have, 0)
+            add(r1, 0, np.inf)                                        # >= 1 when this QB is used
+    k_dst = ctx["max_vs_own_dst"]
+    if dst_locked:
+        d = team[dst_locked[0]]
+        qrow = (pos[pi] == "QB") & (opp[pi] == d)                     # M5 (hard)
+        if qrow.any():
+            add(qrow, 0, 0)
+        if any(pos[i] == "QB" and opp[i] == d for i in kp):
+            return None
+        n_vs = sum(1 for i in kp if opp[i] == d and pos[i] in ("RB", "WR", "TE"))
+        row = skill & (opp[pi] == d)
+        if row.any():
+            add(row, 0, max(k_dst - n_vs, 0))                          # M6
+    else:
+        for k in np.flatnonzero(pos[pi] == "DST"):
+            d = team[pi[k]]
+            if any(pos[i] == "QB" and opp[i] == d for i in kp):
+                add(np.arange(m) == k, 0, 0)                          # M5: our locked QB faces it
+                continue
+            qrow = ((pos[pi] == "QB") & (opp[pi] == d)).astype(float)
+            qrow[k] += 1
+            add(qrow, -np.inf, 1)                                      # M5
+            n_vs = sum(1 for i in kp if opp[i] == d and pos[i] in ("RB", "WR", "TE"))
+            row = (skill & (opp[pi] == d)).astype(float)
+            row[k] += M - max(k_dst - n_vs, 0)
+            add(row, -np.inf, M)                                       # M6
+    res = milp(-points[pi].astype(float), constraints=[LinearConstraint(np.array(A), lo, hi)],
                integrality=np.ones(m), bounds=Bounds(0, 1), options={"time_limit": 5})
     if res.x is None:
         return None
@@ -111,8 +156,7 @@ def options_for_entry(cur, ctx, rng):
     tmax, gmax = ctx["max_per_team"], ctx["game_max"]
     team_room = {t: tmax - int((team[keep] == t).sum()) for t in set(team)}
     game_room = {g: gmax - int((game[keep] == g).sum()) for g in set(game)}
-    dst_locked = [i for i in keep if pos[i] == "DST"]
-    dst_team = team[dst_locked[0]] if dst_locked else None
+    floor = ctx["min_salary"] - (int(sal[keep].sum()) if keep else 0)
     seen = {tuple(sorted(cur))} if complete else set()
     worlds = [proj, ctx["ceil"]] + [fp[:, s] for s in rng.choice(fp.shape[1], ctx["n_opts"], replace=False)]
     for pts in worlds:
@@ -120,8 +164,7 @@ def options_for_entry(cur, ctx, rng):
         top = ok[np.argsort(-pts[ok])[:max(40, 6 * len(open_slots))]]
         mask = np.zeros(len(sal), bool)
         mask[top] = True
-        fill = _fill(pts, open_slots, mask, elig, sal, budget, team, game, opp, pos, team_room, game_room,
-                     dst_team, ctx["no_vs_dst"])
+        fill = _fill(pts, open_slots, mask, ctx, keep, budget, floor, team_room, game_room)
         if fill is None:
             continue
         lu = list(cur)
@@ -185,7 +228,8 @@ def _marginal(top1: np.ndarray, eo: list, has_cur: list) -> np.ndarray:
 
 def choose(entry_opts, scores, swappable, n_players, max_exposure, keep_bonus=1e-4):
     """One option per entry maximizing the summed objective, each swappable player in at most
-    max_exposure of entries (locked players aren't counted - they can't move)."""
+    max_exposure of entries (locked players aren't counted - they can't move), and never the same
+    lineup in two entries (Kenny's rule)."""
     from scipy.optimize import Bounds, LinearConstraint, milp
     E = len(entry_opts)
     flat = [(e, o) for e in range(E) for o in range(len(entry_opts[e]))]
@@ -203,6 +247,17 @@ def choose(entry_opts, scores, swappable, n_players, max_exposure, keep_bonus=1e
     cons = [LinearConstraint(A1, 1, 1)]
     if ps and E >= 2:
         cons.append(LinearConstraint(cnt[ps], 0, cap))
+    by_key: dict = {}
+    for k, (e, o) in enumerate(flat):
+        by_key.setdefault(tuple(sorted(entry_opts[e][o])), set()).add((e, k))
+    dup_rows = []
+    for key, members in by_key.items():
+        if len({e for e, _ in members}) > 1:            # the same lineup offered to 2+ entries
+            row = np.zeros(K)
+            row[[k for _, k in members]] = 1
+            dup_rows.append(row)
+    if dup_rows:
+        cons.append(LinearConstraint(np.array(dup_rows), 0, 1))
     res = milp(-obj, constraints=cons, integrality=np.ones(K), bounds=Bounds(0, 1),
                options={"time_limit": 60, "mip_rel_gap": 0.002})
     if res.x is None:                      # caps can't hold (locked chalk): best per entry
@@ -212,6 +267,17 @@ def choose(entry_opts, scores, swappable, n_players, max_exposure, keep_bonus=1e
         if res.x[k] > 0.5:
             pick[e] = o
     return pick
+
+
+def _legal(lu, P, ctx) -> bool:
+    """DK rules + QB with 1-2 of his pass-catchers + salary floor + no QB facing our DST."""
+    lu = np.asarray(lu)
+    if not L.valid(lu, P) or P.sal[lu].sum() < ctx["min_salary"]:
+        return False
+    q = lu[P.pos[lu] == "QB"][0]
+    d = lu[P.pos[lu] == "DST"][0]
+    mates = sum(1 for i in lu if P.team[i] == P.team[q] and P.pos[i] in ("WR", "TE"))
+    return 1 <= mates <= 2 and P.opp[q] != P.team[d]
 
 
 def reevaluate(pool: pd.DataFrame, fpA: np.ndarray, fpB: np.ndarray, currents: list, contests_of: list,
@@ -225,7 +291,11 @@ def reevaluate(pool: pd.DataFrame, fpA: np.ndarray, fpB: np.ndarray, currents: l
     ctx = dict(sal=P.sal, pos=P.pos, team=P.team, game=P.game, opp=P.opp, locked=locked,
                elig=eligibility(P.pos), proj=proj, ceil=np.percentile(fpA, 85, axis=1).astype(np.float32),
                fp=fpA[:, :min(fpA.shape[1], 2000)], allow=allow & ~dead, max_per_team=rules.max_per_team,
-               game_max=rules.game_max, no_vs_dst=rules.no_offense_vs_dst, n_opts=int(S("lateswap.options")))
+               game_max=rules.game_max, max_vs_own_dst=0 if rules.no_offense_vs_dst else 8, rb_per_team=3,
+               min_salary=int(S("build.min_salary")),
+               # before the first lock every spot is open (a full rebuild per entry): half the options
+               # keeps the check under 3 minutes for 190 entries; after a lock few spots are open
+               n_opts=int(S("lateswap.options")) if locked.any() else max(10, int(S("lateswap.options")) // 2))
     t0 = datetime.now()
     opts = build_options(currents, ctx, seed=seed)
     print(f"[lateswap] options for {len(opts)} entries in {(datetime.now() - t0).seconds}s "
@@ -235,6 +305,7 @@ def reevaluate(pool: pd.DataFrame, fpA: np.ndarray, fpB: np.ndarray, currents: l
     margin, z, n_test = float(S("lateswap.margin")), float(S("portfolio.swap_z")), int(S("lateswap.confirm_options"))
     out = [list(c) if c is not None else None for c in currents]
     log = []
+    taken: set = set()                     # lineups already used by entries of earlier contests
     for cid in dict.fromkeys(contests_of):
         c = contests[cid]
         ent = [k for k, x in enumerate(contests_of) if x == cid]
@@ -242,6 +313,8 @@ def reevaluate(pool: pd.DataFrame, fpA: np.ndarray, fpB: np.ndarray, currents: l
         has = [len(o) > 0 for o in eo]
         ent = [k for k, h in zip(ent, has) if h]
         eo = [o for o in eo if o]
+        # options that would repeat a lineup another contest's entry already has are dropped
+        eo = [[x for j, x in enumerate(o) if j == 0 or tuple(sorted(x)) not in taken] for o in eo]
         if not eo:
             continue
         flat = np.array([sorted(x) for o in eo for x in o])
@@ -266,6 +339,10 @@ def reevaluate(pool: pd.DataFrame, fpA: np.ndarray, fpB: np.ndarray, currents: l
         for i, k in enumerate(ent):
             new = kept[i][pick[i]]
             old = currents[k]
+            if old is not None and not _legal(new, P, ctx):          # safety net: never worse than now
+                print(f"[lateswap] entry {k}: the new lineup broke a rule - kept the current one")
+                new = old
+            taken.add(tuple(sorted(new)))
             if old is None or sorted(new) != sorted(old):
                 outs = [p for p in (old or []) if p not in new]
                 ins = [p for p in new if p not in (old or [])]
