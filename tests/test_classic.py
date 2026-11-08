@@ -227,3 +227,18 @@ def test_exposure_exception_needs_a_note(tmp_path):
     ext.exceptions = {0: 0.45}
     capv = ext.player_caps(20, 1, 3)
     assert capv[0] == min(9, portfolio.caps(20)) and capv[1] == 6   # 45% (never above the overall cap); plain cheap 30%
+
+
+def test_started_games_keep_their_game_info(tmp_path, monkeypatch):
+    """Found live 11/08/2026: once the 1:00 games start, DK's salary file shows 'In-Progress'
+    instead of the game - it must be filled back in (else every late swap crashes)."""
+    monkeypatch.setattr(slate, "STATE_DIR", tmp_path)
+    head = "Position,Name + ID,Name,ID,Roster Position,Salary,Game Info,TeamAbbrev,AvgPointsPerGame\n"
+    rows = ["QB,A (1),A,1,QB,6000,{g1},DAL,20", "WR,B (2),B,2,WR/FLEX,5000,{g2},IND,12",
+            "WR,C (3),C,3,WR/FLEX,4000,SEA@ARI 11/08/2026 04:25PM ET,SEA,10"]
+    before = head + "\n".join(rows).format(g1="DAL@IND 11/08/2026 01:00PM ET", g2="DAL@IND 11/08/2026 01:00PM ET")
+    after = head + "\n".join(rows).format(g1="In-Progress", g2="In-Progress")
+    slate.load_classic(before)                               # seen before kickoff: remembered
+    p = slate.load_classic(after)
+    assert list(p["game"]) == ["DAL@IND", "DAL@IND", "SEA@ARI"]
+    assert p["kickoff"].iloc[0].startswith("2026-11-08T13:00")
