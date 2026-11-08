@@ -1,2 +1,7 @@
 # Kenny, today only (11/08 ~10 AM): 40% player cap for more pivots (wider sim randomness was tested and did not help)
 portfolio.max_exposure: 0.4
+# Kenny 3:00 PM, today only, for the Afternoon (4-game) rebuild - from 42 real 4-game slates' best lineups:
+# QB+2 14% (we had 38%), QB with own RB 24% (we had 57%), exactly 1 bring-back 36% (2+: 24%)
+rules.double_stack_share: 0.25
+rules.bringback_share: 0.40
+afternoon.qb_own_rb: 1
