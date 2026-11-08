@@ -1,0 +1,116 @@
+{
+ "day": "2026-11-08",
+ "slates": {
+  "155994": {
+   "label": "main",
+   "type": "main",
+   "contests": [
+    "197411850",
+    "197411851",
+    "197429914"
+   ]
+  }
+ },
+ "plans": [
+  {
+   "contest": "NFL $500K Play-Action [20 Entry Max]",
+   "id": "197411850",
+   "entries": 20,
+   "field": 198176,
+   "fee": 3.0,
+   "filled": 20,
+   "note": "quality floor relaxed to 75% / $47,000",
+   "payouts": "estimated",
+   "objective": "top-1% (portfolio)",
+   "p_any_top1": 0.3978,
+   "avg_top1": 0.03629,
+   "cash": 0.41664,
+   "roi_reported": 12.791696548461914,
+   "value": 0.57925,
+   "swaps": [],
+   "stacks": {
+    "LV": 9,
+    "WAS": 6,
+    "NYJ": 5
+   },
+   "slate": "main"
+  },
+  {
+   "contest": "NFL $100K First Down [20 Entry Max]",
+   "id": "197411851",
+   "entries": 20,
+   "field": 118906,
+   "fee": 1.0,
+   "filled": 20,
+   "note": "quality floor relaxed to 75% / $47,000",
+   "payouts": "estimated",
+   "objective": "top-1% (portfolio)",
+   "p_any_top1": 0.4652,
+   "avg_top1": 0.04584,
+   "cash": 0.4864,
+   "roi_reported": 8.463125228881836,
+   "value": 0.6944,
+   "swaps": [
+    {
+     "slot": 0,
+     "out": 195,
+     "in": 983,
+     "gain_B": -0.00035,
+     "se_B": 0.0027953601391701804,
+     "accepted": false
+    }
+   ],
+   "stacks": {
+    "LV": 7,
+    "DAL": 7,
+    "NYJ": 6
+   },
+   "slate": "main"
+  },
+  {
+   "contest": "NFL $150K mini-MAX [150 Entry Max]",
+   "id": "197429914",
+   "entries": 150,
+   "field": 356718,
+   "fee": 0.5,
+   "filled": 150,
+   "note": "quality floor relaxed to 75% / $47,000",
+   "payouts": "estimated",
+   "objective": "top-1% (portfolio)",
+   "p_any_top1": 0.9362,
+   "avg_top1": 0.072924,
+   "cash": 0.5951813333333333,
+   "roi_reported": 46.0544548034668,
+   "value": 1.30082,
+   "swaps": [
+    {
+     "slot": 2,
+     "out": 985,
+     "in": 2126,
+     "gain_B": -0.0008799999999999997,
+     "se_B": 0.0003379039315019818,
+     "accepted": false
+    },
+    {
+     "slot": 4,
+     "out": 212,
+     "in": 2126,
+     "gain_B": -0.0003600000000000001,
+     "se_B": 0.0001221081300013059,
+     "accepted": false
+    }
+   ],
+   "stacks": {
+    "LV": 69,
+    "NYJ": 35,
+    "WAS": 12,
+    "SF": 8,
+    "DET": 8,
+    "DAL": 7,
+    "CLE": 6,
+    "KC": 5
+   },
+   "slate": "main"
+  }
+ ]
+}
