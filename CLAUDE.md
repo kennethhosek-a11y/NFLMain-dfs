@@ -66,6 +66,30 @@ something, it tells Kenny to ask in the latest NFL Main chat.
 - Stacking is built in: the QB always has at least one of his pass-catchers, bring-backs are
   tried, and nobody faces our own DST.
 
+## Kenny's lineup-rules workbook (owner rule, 11/08/2026)
+`research/rules/NFL_DFS_Lineup_Rules_<date>.xlsx` holds the starting build rules. **Every weekly
+chat reads the newest one** (latest date in the file name) before Tuesday's early look and before
+every build. Its sheets:
+- NFL Main Rules (M1-M18);
+- Short Slate Changes (SS1-SS7, for 2-4 game slates: Afternoon, Thanksgiving);
+- data, correlation and source sheets.
+The Showdown sheet belongs to the NFL Showdown system; read it, never act on it here.
+
+How to use it:
+- **Respect Kenny's yellow columns.** "Use? (Y/N)" and "Your setting / notes" win over the
+  workbook's own Setting. If Use? is N, don't apply the rule. If the columns are blank, treat the
+  rule as proposed: tell Kenny which rules are in force and which aren't yet.
+- **Hard** rules are never broken. **Soft** rules are penalties or portfolio-share targets the
+  simulation may override.
+- **Evidence "Opinion" rules get backtested on the history database (`research/backtest/`) before
+  they change the build.** Report the result in plain words.
+- The workbook doesn't change the build by itself. A rule reaches lineups only through a
+  `config/settings.yaml` default or a code change. Both go by pull request, which Kenny merges.
+  Kenny's "today only" or "from now on" values go in `data/settings/`.
+- Its public data is mostly from before 2022. Where our own backtest disagrees, say so and show
+  both numbers.
+- A new version from Kenny is saved as a new dated file. Never edit or delete an older one.
+
 ## Secrets and paid data
 - **Never commit API keys or tokens.**
 - **No Odds API for now** (Kenny, 11/07/2026). Don't use The Odds API or `ODDS_API_KEY` at all.
