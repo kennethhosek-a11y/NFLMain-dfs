@@ -71,7 +71,7 @@ class Rules:
         from .settings import for_type, get
         return cls(int(for_type(slate_type, "stack_min")), int(for_type(slate_type, "stack_max")),
                    int(for_type(slate_type, "bringback")), int(get("portfolio.max_per_team")),
-                   int(for_type(slate_type, "game_max")), bool(int(get("portfolio.no_offense_vs_dst"))))
+                   int(for_type(slate_type, "game_max")), bool(int(for_type(slate_type, "no_vs_dst"))))
 
 
 def valid(lu, P: Pool, rules: Rules | None = None) -> bool:

@@ -30,7 +30,6 @@ portfolio:
   top1_weight:   {default: 5.0, min: 0.0, max: 20.0, type: float, label: "Top-heavy vs spread out", help: "Large contests: P(at least one lineup top 1%) + this x the average top-1% rate."}
   swap_z:        {default: 2.0, min: 1.0, max: 4.0,  type: float, label: "Swap confidence (standard errors)", help: "A swap must win on independent simulations by more than this many standard errors."}
   swap_tries:    {default: 12,  min: 1,   max: 50,   type: int,   label: "Swap options tried per lineup", help: ""}
-  no_offense_vs_dst: {default: 1, min: 0, max: 1,    type: int,   label: "No hitters against your own defense", help: "1 = never roster a QB/RB/WR/TE facing your DST."}
 
 contest:
   large_field:    {default: 1000, min: 100, max: 100000, type: int,   label: "Large contest threshold", help: "Contests at least this big are judged on top-1% finishes; smaller ones on cashing."}
@@ -80,27 +79,34 @@ news:
 # gate_pct:    ceiling gate - drop the bottom share of playable players by how often they reach
 #              the slate's winning pace (0 = off)
 # game_max:    most players from one game
+# no_vs_dst:   1 = never a QB/RB/WR/TE facing our own DST. Backtest 11/07/2026 (research/backtest):
+#              real best lineups had a hitter vs their own DST on 13% of Main and 18% of Early slates
+#              but 52% of Afternoon and 64% of Thanksgiving slates -> off on the small slates
 early:
   stack_min: {default: 1,    min: 0, max: 3,    type: int,   label: "Early: pass-catchers with the QB (minimum)", help: ""}
   stack_max: {default: 2,    min: 1, max: 3,    type: int,   label: "Early: pass-catchers with the QB (most tried)", help: ""}
   bringback: {default: 1,    min: 0, max: 2,    type: int,   label: "Early: bring-backs (0 off, 1 allowed, 2 required)", help: ""}
   gate_pct:  {default: 0.10, min: 0.0, max: 0.5, type: float, label: "Early: ceiling gate (share dropped)", help: "Start = NBA backtest for 5-7 game slates; NFL backtest in research/gates."}
   game_max:  {default: 5,    min: 3, max: 8,    type: int,   label: "Early: most players from one game", help: ""}
+  no_vs_dst: {default: 1,    min: 0, max: 1,    type: int,   label: "Early: no hitters against your own defense", help: ""}
 main:
   stack_min: {default: 1,    min: 0, max: 3,    type: int,   label: "Main: pass-catchers with the QB (minimum)", help: ""}
   stack_max: {default: 2,    min: 1, max: 3,    type: int,   label: "Main: pass-catchers with the QB (most tried)", help: ""}
   bringback: {default: 1,    min: 0, max: 2,    type: int,   label: "Main: bring-backs (0 off, 1 allowed, 2 required)", help: ""}
   gate_pct:  {default: 0.15, min: 0.0, max: 0.5, type: float, label: "Main: ceiling gate (share dropped)", help: "Start = NBA backtest for 8+ game slates (a flat 25% threw out 15-22% of the real best lineup)."}
   game_max:  {default: 5,    min: 3, max: 8,    type: int,   label: "Main: most players from one game", help: ""}
+  no_vs_dst: {default: 1,    min: 0, max: 1,    type: int,   label: "Main: no hitters against your own defense", help: ""}
 afternoon:
   stack_min: {default: 1,    min: 0, max: 3,    type: int,   label: "Afternoon: pass-catchers with the QB (minimum)", help: "Small slate: heavier game stacks."}
   stack_max: {default: 3,    min: 1, max: 3,    type: int,   label: "Afternoon: pass-catchers with the QB (most tried)", help: ""}
   bringback: {default: 1,    min: 0, max: 2,    type: int,   label: "Afternoon: bring-backs (0 off, 1 allowed, 2 required)", help: ""}
   gate_pct:  {default: 0.05, min: 0.0, max: 0.5, type: float, label: "Afternoon: ceiling gate (share dropped)", help: "Light: NBA backtest for 3-4 game slates. Small slates have concentrated ownership."}
   game_max:  {default: 6,    min: 3, max: 8,    type: int,   label: "Afternoon: most players from one game", help: ""}
+  no_vs_dst: {default: 0,    min: 0, max: 1,    type: int,   label: "Afternoon: no hitters against your own defense", help: ""}
 thanksgiving:
   stack_min: {default: 1,    min: 0, max: 3,    type: int,   label: "Thanksgiving: pass-catchers with the QB (minimum)", help: "3-game slate, three lock windows."}
   stack_max: {default: 3,    min: 1, max: 3,    type: int,   label: "Thanksgiving: pass-catchers with the QB (most tried)", help: ""}
   bringback: {default: 1,    min: 0, max: 2,    type: int,   label: "Thanksgiving: bring-backs (0 off, 1 allowed, 2 required)", help: ""}
   gate_pct:  {default: 0.0,  min: 0.0, max: 0.5, type: float, label: "Thanksgiving: ceiling gate (share dropped)", help: ""}
   game_max:  {default: 6,    min: 3, max: 8,    type: int,   label: "Thanksgiving: most players from one game", help: ""}
+  no_vs_dst: {default: 0,    min: 0, max: 1,    type: int,   label: "Thanksgiving: no hitters against your own defense", help: ""}
